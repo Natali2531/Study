@@ -9,6 +9,129 @@
 
 Основную сущность и предметные примеры выберите по [варианту лабораторной №5](../../methodical-guidelines/teachers-resources/lab5_V.md). Номер варианта должен совпадать с предыдущими работами.
 
+***
+
+## Краткая теория
+
+**Generics (Обобщения)** — это механизм параметризации типов, позволяющий создавать классы, интерфейсы и методы, которые работают с различными типами данных, сохраняя при этом строгую типобезопасность. 
+
+Основные преимущества:
+1. **Типобезопасность на этапе компиляции**: Ошибки приведения типов (`ClassCastException`) выявляются компилятором, а не возникают в рантайме.
+2. **Отсутствие неявных приведений**: При извлечении объектов из обобщённых коллекций не требуется явное приведение к нужному типу (кастование).
+3. **Переиспользование кода**: Одна реализация алгоритма или структуры данных может работать с любыми ссылочными типами.
+
+### Базовые конструкции
+
+**Обобщённые классы и интерфейсы**
+Параметры типа указываются в угловых скобках. По соглашению используются заглавные буквы: `T` (Type), `K` (Key), `V` (Value), `E` (Element), `N` (Number).
+```java
+public class Box<T> {
+    private T content;
+    public void put(T item) { this.content = item; }
+    public T get() { return content; }
+}
+```
+
+**Обобщённые методы**
+Параметр типа объявляется *перед* типом возвращаемого значения. Это позволяет применять обобщения в статических методах, не зависящих от параметров класса.
+```java
+public static <T> void printAll(T[] array) {
+    for (T item : array) System.out.println(item);
+}
+```
+
+**Ограничения типов (Bounded Type Parameters)**
+Позволяют задать верхнюю границу для параметра типа с помощью ключевого слова `extends`.
+```java
+// T должен реализовывать интерфейс Comparable<T>
+public static <T extends Comparable<T>> T max(T a, T b) {
+    return a.compareTo(b) >= 0 ? a : b;
+}
+```
+
+**Wildcards (Подстановочные знаки) и принцип PECS**
+Используются для гибкости API при работе с коллекциями.
+- `? extends T` (**P**roducer **E**xtends) — только чтение (источник данных).
+- `? super T` (**C**onsumer **S**uper) — только запись (приёмник данных).
+```java
+// Метод принимает список Number или любого его наследника (Integer, Double)
+public static double sum(List<? extends Number> list) { ... }
+```
+
+**Стирание типов (Type Erasure)**
+При компиляции информация о параметрах типов стирается (заменяется на `Object` или первую границу). Из-за этого:
+- Нельзя использовать примитивы (`int`, `double`) — нужны классы-обёртки (`Integer`, `Double`).
+- Нельзя создавать экземпляры параметризованного типа (`new T()`) или параметризованные массивы (`new T[10]`).
+
+---
+
+## Примеры реализации (для справки)
+
+### 1. Обобщённый класс `Pair<A, B>`
+```java
+public class Pair<A, B> {
+    private final A first;
+    private final B second;
+
+    public Pair(A first, B second) {
+        this.first = first;
+        this.second = second;
+    }
+
+    public A getFirst() { return first; }
+    public B getSecond() { return second; }
+}
+```
+
+### 2. Обобщённый статический метод `swap`
+```java
+public static <T> void swap(T[] array, int i, int j) {
+    if (array == null) throw new IllegalArgumentException("Array cannot be null");
+    if (i < 0 || i >= array.length || j < 0 || j >= array.length) {
+        throw new IndexOutOfBoundsException("Index out of bounds");
+    }
+    T temp = array[i];
+    array[i] = array[j];
+    array[j] = temp;
+}
+```
+
+### 3. Ограничение `Comparable` для поиска минимума/максимума
+```java
+public class ComparablePair<T extends Comparable<T>> {
+    private final T first;
+    private final T second;
+
+    public ComparablePair(T first, T second) {
+        this.first = first;
+        this.second = second;
+    }
+
+    public T min() {
+        return first.compareTo(second) <= 0 ? first : second;
+    }
+
+    public T max() {
+        return first.compareTo(second) >= 0 ? first : second;
+    }
+}
+```
+
+### 4. Интерфейс `Repository<T>`
+```java
+import java.util.List;
+import java.util.Optional;
+
+// Если вариант требует строго один параметр типа, ID фиксируется (например, Long)
+public interface Repository<T> {
+    void save(T entity);
+    Optional<T> findById(Long id); 
+    void deleteById(Long id);
+    List<T> findAll();
+}
+```
+*(Примечание: Использование `Optional<T>` для `findById` — это хорошая практика для согласования с последующими лабораторными по исключениям. Это позволяет явно показать отсутствие объекта без генерации исключения или возврата `null`).*
+
 ## Порядок выполнения
 
 Перед началом изучите [инструкцию по промптам](../../resources/llm-prompts/code-generation-and-review.md). Технические формулировки, API, signatures и diagnostics передавайте на английском.
