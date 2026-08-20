@@ -556,7 +556,7 @@
 
 ## 11. Содержание лабораторных работ модуля
 
-- [Лабораторная работа №9. Функциональные интерфейсы и лямбда-выражения](lab9_functional_interfaces_and_lambdas.md)
-- [Лабораторная работа №10. Stream API: обработка потоков данных](lab10_stream_api.md)
-- [Лабораторная работа №11. Сериализация и работа с JSON](lab11_json_serialization.md)
-- [Лабораторная работа №12. Интеграция с внешними API и LLM-сервисами](lab12_external_api_and_llm_integration.md)
+- [Лабораторная работа №9. Функциональные интерфейсы и лямбда-выражения](https://github.com/Natali2531/files/blob/main/%D0%9B%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%9E%D0%9E%D0%9F/Lab2.md)
+- [Лабораторная работа №10. Stream API: обработка потоков данных](https://github.com/Natali2531/files/blob/main/%D0%9B%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%9E%D0%9E%D0%9F/Lab2.md)
+- [Лабораторная работа №11. Сериализация и работа с JSON](https://github.com/Natali2531/files/blob/main/%D0%9B%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%9E%D0%9E%D0%9F/Lab2.md)
+- [Лабораторная работа №12. Интеграция с внешними API и LLM-сервисами](https://github.com/Natali2531/files/blob/main/%D0%9B%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%9E%D0%9E%D0%9F/Lab2.md)
