@@ -344,8 +344,8 @@
 
 ## 11. Содержание лабораторных работ модуля
 
-- [Лабораторная работа №5. Перечисления, вложенные типы и записи](lab5_enums_nested_types_records.md)
-- [Лабораторная работа №6. Обобщённое программирование (Generics)](lab6_generics.md)
-- [Лабораторная работа №7. Стандартная библиотека коллекций](lab7_collections_framework.md)
-- [Лабораторная работа №8. Исключения как часть ООП-дизайна](lab8_exceptions_in_oop_design.md)
+- [Лабораторная работа №5. Перечисления, вложенные типы и записи](https://github.com/Natali2531/files/blob/main/%D0%9B%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%9E%D0%9E%D0%9F/Lab5.md)
+- [Лабораторная работа №6. Обобщённое программирование (Generics)](https://github.com/Natali2531/files/blob/main/%D0%9B%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%9E%D0%9E%D0%9F/Lab6.md)
+- [Лабораторная работа №7. Стандартная библиотека коллекций](https://github.com/Natali2531/files/blob/main/%D0%9B%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%9E%D0%9E%D0%9F/Lab7.md)
+- [Лабораторная работа №8. Исключения как часть ООП-дизайна](https://github.com/Natali2531/files/blob/main/%D0%9B%D0%B0%D0%B1%D0%BE%D1%80%D0%B0%D1%82%D0%BE%D1%80%D0%BD%D1%8B%D0%B5%20%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B%20%D0%BF%D0%BE%20%D0%9E%D0%9E%D0%9F/Lab8.md)
 
