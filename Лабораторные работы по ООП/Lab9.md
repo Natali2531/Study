@@ -1,868 +1,1261 @@
-# Лабораторная работа №9. Функциональные интерфейсы и лямбда-выражения
+# Лабораторная работа №9. Многопоточность: Runnable, Thread, synchronized
 
 ## 1. Паспорт работы
 
 | Параметр | Значение |
 |----------|----------|
-| Тема | Функциональные интерфейсы и лямбда-выражения |
-| Номер занятия в модуле | 1 из 4 (модуль 3) |
-| Продолжительность аудиторной части | 2 академических часа |
-| Предшествующая подготовка | Модули 1–2 (ООП, обобщения, коллекции, исключения) |
-| Тип работы | Формирование навыков функционального стиля программирования в Java |
+| Номер занятия | 9 из 17 |
+| Блок | 4. Многопоточность |
+| Продолжительность | 2 академических часа |
+| Форма выполнения | Индивидуальная |
+| ИИ-инструмент | YandexGPT / GigaChat / JetBrains AI Assistant |
 
 ### 1.1. Цель работы
 
-Освоить функциональный стиль программирования в языке Java: научиться применять лямбда-выражения и методные ссылки, использовать стандартные функциональные интерфейсы пакета `java.util.function`, применять паттерн `Optional` для безопасной работы с возможными отсутствующими значениями, а также осваивать приёмы композиции функций и предикатов.
+Освоить базовые механизмы создания и управления потоками в Java, изучить проблему гонки данных (race condition) и способы её решения с помощью синхронизации, научиться сравнивать производительность синхронизированного и несинхронизированного кода.
 
 ### 1.2. Задачи работы
 
-1. Изучить мотивацию введения лямбда-выражений в язык Java.
-2. Освоить синтаксис лямбда-выражений и области их применения.
-3. Изучить понятие функционального интерфейса и аннотации `@FunctionalInterface`.
-4. Освоить стандартные функциональные интерфейсы: `Predicate`, `Function`, `Consumer`, `Supplier`, `BiFunction`, `UnaryOperator`, `BinaryOperator`.
-5. Изучить механизм методных ссылок (static, instance, constructor).
-6. Освоить паттерн `Optional` и его методы для безопасной работы с возможными отсутствующими значениями.
-7. Научиться применять композицию функций (`andThen`, `compose`) и комбинацию предикатов (`and`, `or`, `negate`).
-8. Изучить понятие замыкания и эффективно финальных переменных.
+1. Изучить способы создания потоков: `Thread` и `Runnable`.
+2. Освоить запуск потоков методом `start()`.
+3. Изучить проблему гонки данных при конкурентном доступе.
+4. Освоить ключевое слово `synchronized` для синхронизации.
+5. Изучить альтернативу синхронизации через `ReentrantLock`.
+6. Научиться измерять производительность многопоточного кода.
+7. Развить навыки отладки многопоточных приложений.
 
 ### 1.3. Оснащение
 
-- JDK версии 17 или выше;
-- интегрированная среда разработки IntelliJ IDEA Community Edition;
-- система сборки Maven или Gradle;
-- система контроля версий Git;
-- система модульного тестирования JUnit 5.
+- JDK 17 или выше;
+- IntelliJ IDEA Community Edition;
+- Git;
+- доступ к YandexGPT или GigaChat.
 
-## 2. Теоретические сведения
+---
 
-### 2.1. Мотивация: от анонимных классов к лямбда-выражениям
+## 2. Теоретический конспект
 
-До появления лямбда-выражений в Java 8 для передачи поведения в методы применялись анонимные классы. Рассмотрим пример сортировки списка строк по длине:
+### 2.1. Процесс vs Поток
+
+**Процесс** — экземпляр выполняющейся программы, имеющий собственное адресное пространство памяти.
+
+**Поток** — легковесный процесс, выполняющийся в рамках одного процесса. Потоки одного процесса разделяют общую память.
+
+**Зачем нужна многопоточность:**
+- **CPU-bound задачи** — использование нескольких ядер процессора для ускорения вычислений.
+- **I/O-bound задачи** — выполнение операций ввода-вывода (чтение файлов, сетевые запросы) без блокировки основного потока.
+- **Параллельная обработка** данных.
+
+### 2.2. Создание потоков
+
+**Способ 1: Наследование от Thread**
 
 ```java
-// До Java 8 — анонимный класс
-List<String> names = Arrays.asList("Анна", "Борис", "Виктор", "Дмитрий");
-
-Collections.sort(names, new Comparator<String>() {
+class MyThread extends Thread {
     @Override
-    public int compare(String s1, String s2) {
-        return Integer.compare(s1.length(), s2.length());
+    public void run() {
+        System.out.println("Поток " + Thread.currentThread().getName() + " выполняется");
     }
+}
+
+// Запуск
+MyThread thread = new MyThread();
+thread.start(); // Запускает новый поток
+// thread.run(); // НЕ ЗАПУСКАЕТ новый поток! Выполняется в текущем потоке
+```
+
+**Способ 2: Реализация Runnable**
+
+```java
+class MyRunnable implements Runnable {
+    @Override
+    public void run() {
+        System.out.println("Поток " + Thread.currentThread().getName() + " выполняется");
+    }
+}
+
+// Запуск
+Thread thread = new Thread(new MyRunnable());
+thread.start();
+```
+
+**Способ 3: Лямбда-выражение (Java 8+)**
+
+```java
+Thread thread = new Thread(() -> {
+    System.out.println("Поток " + Thread.currentThread().getName() + " выполняется");
 });
+thread.start();
 ```
 
-Данный код содержит существенный «шум»: большая часть синтаксиса посвящена не логике сравнения, а формальным требованиям языка. Лямбда-выражения позволяют записать ту же логику значительно короче:
+### 2.3. Состояния потока
 
-```java
-// Java 8+ — лямбда-выражение
-names.sort((s1, s2) -> Integer.compare(s1.length(), s2.length()));
-
-// Ещё короче — с использованием Comparator.comparingInt
-names.sort(Comparator.comparingInt(String::length));
+```
+NEW → RUNNABLE → BLOCKED/WAITING/TIMED_WAITING → TERMINATED
 ```
 
-**Преимущества лямбда-выражений:**
+| Состояние | Описание |
+|-----------|----------|
+| NEW | Поток создан, но не запущен |
+| RUNNABLE | Поток выполняется или готов к выполнению |
+| BLOCKED | Поток заблокирован (ожидает монитор) |
+| WAITING | Поток ожидает уведомления (wait()) |
+| TIMED_WAITING | Поток ожидает с таймаутом (sleep(), wait(timeout)) |
+| TERMINATED | Поток завершил выполнение |
 
-1. **Краткость.** Устраняется синтаксический шум, связанный с объявлением класса и метода.
-2. **Выразительность.** Намерение разработчика становится очевидным.
-3. **Передача поведения.** Функции становятся «гражданами первого класса» — их можно передавать как параметры и возвращать из методов.
-4. **Поддержка функционального стиля.** Открываются возможности для применения Stream API и других функциональных конструкций.
+### 2.4. Проблема гонки данных (Race Condition)
 
-### 2.2. Синтаксис лямбда-выражений
-
-**Лямбда-выражение** — анонимная функция, не имеющая собственного имени и предназначенная для немедленного использования. Синтаксически состоит из списка параметров, стрелки `->` и тела.
-
-**Базовые формы:**
-
-```java
-// Без параметров
-() -> System.out.println("Привет!")
-
-// Один параметр (скобки можно опустить)
-x -> x * x
-
-// Несколько параметров
-(x, y) -> x + y
-
-// Параметры с явным типом
-(int x, int y) -> x + y
-
-// Тело из одного выражения (return подразумевается)
-(x, y) -> x > y ? x : y
-
-// Тело из блока инструкций (требуется явный return)
-(x, y) -> {
-    System.out.println("Сравниваем " + x + " и " + y);
-    return x > y ? x : y;
-}
-```
-
-**Правила вывода типов.** Компилятор Java определяет типы параметров лямбда-выражения из контекста (целевого типа — функционального интерфейса, которому присваивается лямбда). Явное указание типов требуется редко.
-
-### 2.3. Функциональные интерфейсы
-
-**Функциональный интерфейс** — интерфейс, содержащий ровно один абстрактный метод. Представляет собой «контракт» для лямбда-выражения.
-
-Аннотация `@FunctionalInterface` не является обязательной, но рекомендуется для проверки корректности на этапе компиляции:
+Гонка данных возникает, когда несколько потоков одновременно обращаются к общим данным, и хотя бы один поток выполняет запись.
 
 ```java
-@FunctionalInterface
-public interface Runnable {
-    void run();
-}
-```
-
-Если интерфейс содержит более одного абстрактного метода, аннотация вызовет ошибку компиляции. При этом `default` и `static` методы не учитываются — они могут присутствовать в функциональном интерфейсе в произвольном количестве.
-
-### 2.4. Стандартные функциональные интерфейсы
-
-Пакет `java.util.function` содержит набор стандартных функциональных интерфейсов для наиболее распространённых сценариев:
-
-| Интерфейс | Сигнатура абстрактного метода | Назначение |
-|-----------|-------------------------------|------------|
-| `Predicate<T>` | `boolean test(T t)` | Проверка условия (возвращает `boolean`) |
-| `Function<T, R>` | `R apply(T t)` | Преобразование объекта типа `T` в тип `R` |
-| `Consumer<T>` | `void accept(T t)` | Выполнение действия над объектом (без возврата) |
-| `Supplier<T>` | `T get()` | Получение объекта (без входных параметров) |
-| `BiFunction<T, U, R>` | `R apply(T t, U u)` | Преобразование двух аргументов в результат |
-| `UnaryOperator<T>` | `T apply(T t)` | Унарная операция (расширяет `Function<T, T>`) |
-| `BinaryOperator<T>` | `T apply(T t1, T t2)` | Бинарная операция (расширяет `BiFunction<T, T, T>`) |
-| `BiPredicate<T, U>` | `boolean test(T t, U u)` | Проверка условия для двух аргументов |
-| `BiConsumer<T, U>` | `void accept(T t, U u)` | Действие над двумя аргументами |
-
-#### 2.4.1. `Predicate<T>` — предикат
-
-Предикат принимает объект и возвращает `boolean`. Применяется для фильтрации и проверки условий:
-
-```java
-Predicate<String> isLong = s -> s.length() > 5;
-Predicate<String> startsWithA = s -> s.startsWith("А");
-
-System.out.println(isLong.test("Виктор"));         // true
-System.out.println(isLong.test("Анна"));           // false
-
-// Комбинация предикатов
-Predicate<String> isLongAndStartsWithA = isLong.and(startsWithA);
-System.out.println(isLongAndStartsWithA.test("Александр"));  // true
-System.out.println(isLongAndStartsWithA.test("Анна"));       // false
-```
-
-#### 2.4.2. `Function<T, R>` — функция
-
-Функция преобразует объект одного типа в объект другого типа:
-
-```java
-Function<String, Integer> lengthFunction = String::length;
-Function<String, String> toUpperCase = String::toUpperCase;
-
-System.out.println(lengthFunction.apply("Привет"));      // 6
-System.out.println(toUpperCase.apply("привет"));         // ПРИВЕТ
-
-// Композиция функций
-Function<String, String> lengthAsString =
-    lengthFunction.andThen(Object::toString);
-System.out.println(lengthAsString.apply("Привет"));      // "6"
-```
-
-#### 2.4.3. `Consumer<T>` — потребитель
-
-Потребитель выполняет действие над объектом, не возвращая значения. Применяется для вывода, логирования, модификации:
-
-```java
-Consumer<String> printer = s -> System.out.println("Сообщение: " + s);
-Consumer<String> logger = s -> System.err.println("[LOG] " + s);
-
-printer.accept("Тестовое сообщение");
-
-// Композиция потребителей (последовательное выполнение)
-Consumer<String> printAndLog = printer.andThen(logger);
-printAndLog.accept("Важное сообщение");
-```
-
-#### 2.4.4. `Supplier<T>` — поставщик
-
-Поставщик не принимает аргументов, но возвращает значение. Применяется для ленивой генерации значений, фабрик объектов:
-
-```java
-Supplier<LocalDate> today = LocalDate::now;
-Supplier<List<String>> emptyList = ArrayList::new;
-Supplier<Double> randomValue = Math::random;
-
-System.out.println(today.get());           // 2026-08-20
-System.out.println(emptyList.get());       // []
-System.out.println(randomValue.get());     // 0.732...
-```
-
-### 2.5. Методные ссылки
-
-**Методная ссылка** — краткая запись лямбда-выражения, ссылающаяся на существующий метод по имени. Оператор `::` разделяет имя класса (или объекта) и имя метода.
-
-**Виды методных ссылок:**
-
-| Вид | Синтаксис | Пример лямбды |
-|-----|-----------|---------------|
-| Ссылка на статический метод | `ClassName::staticMethod` | `args -> ClassName.method(args)` |
-| Ссылка на метод экземпляра (неограниченная) | `ClassName::instanceMethod` | `obj -> obj.method()` |
-| Ссылка на метод экземпляра конкретного объекта | `instance::method` | `() -> instance.method()` |
-| Ссылка на конструктор | `ClassName::new` | `args -> new ClassName(args)` |
-
-Примеры:
-
-```java
-// Статический метод
-Function<String, Integer> parseInt = Integer::parseInt;
-System.out.println(parseInt.apply("42"));   // 42
-
-// Метод экземпляра (неограниченная ссылка)
-Function<String, String> toUpper = String::toUpperCase;
-System.out.println(toUpper.apply("привет"));   // ПРИВЕТ
-
-// Метод экземпляра конкретного объекта
-String greeting = "Привет";
-Supplier<String> greetSupplier = greeting::toUpperCase;
-System.out.println(greetSupplier.get());   // ПРИВЕТ
-
-// Конструктор
-Function<String, StringBuilder> builderFactory = StringBuilder::new;
-StringBuilder sb = builderFactory.apply("Тест");
-```
-
-### 2.6. Эффективно финальные переменные
-
-Лямбда-выражения могут захватывать переменные из окружающей области видимости, но только при условии, что эти переменные являются **эффективно финальными** (effectively final) — то есть их значение не изменяется после инициализации.
-
-```java
-int multiplier = 10;   // эффективно финальная
-// multiplier = 20;    // если раскомментировать, лямбда не скомпилируется
-
-Function<Integer, Integer> multiply = x -> x * multiplier;
-System.out.println(multiply.apply(5));   // 50
-```
-
-**Причина ограничения.** Лямбда-выражения могут выполняться в другом потоке или в другой момент времени. Если бы захваченные переменные могли изменяться, возникли бы проблемы согласованности. Требование effectively final гарантирует, что захваченное значение остаётся постоянным.
-
-### 2.7. Паттерн `Optional<T>`
-
-**`Optional<T>`** — контейнер, представляющий возможное отсутствие значения. Является альтернативой `null` и позволяет явно выразить семантику «значение может отсутствовать».
-
-#### 2.7.1. Создание `Optional`
-
-```java
-Optional<String> empty = Optional.empty();
-Optional<String> nonEmpty = Optional.of("Привет");
-Optional<String> nullable = Optional.ofNullable(null);   // пустой Optional
-```
-
-#### 2.7.2. Основные методы
-
-| Метод | Назначение |
-|-------|------------|
-| `isPresent()` | Возвращает `true`, если значение присутствует |
-| `isEmpty()` | Возвращает `true`, если значение отсутствует (Java 11+) |
-| `get()` | Возвращает значение (бросает `NoSuchElementException`, если пусто) |
-| `orElse(T other)` | Возвращает значение или `other`, если пусто |
-| `orElseGet(Supplier<T> s)` | Возвращает значение или результат `s`, если пусто |
-| `orElseThrow(Supplier<Exception> s)` | Возвращает значение или бросает исключение |
-| `ifPresent(Consumer<T> c)` | Выполняет действие `c`, если значение присутствует |
-| `ifPresentOrElse(Consumer, Runnable)` | Выполняет действие или альтернативу (Java 9+) |
-
-#### 2.7.3. Преобразование `Optional`
-
-```java
-Optional<String> name = Optional.of("Анна");
-
-// map — преобразование значения
-Optional<Integer> nameLength = name.map(String::length);   // Optional[6]
-
-// flatMap — преобразование, возвращающее Optional
-Optional<String> upper = name.map(String::toUpperCase);    // Optional[АННА]
-
-// filter — фильтрация
-Optional<String> longName = name.filter(s -> s.length() > 5);  // Optional.empty
-```
-
-#### 2.7.4. Правила применения
-
-1. **Никогда не вызывайте `get()` без предварительной проверки** `isPresent()`.
-2. **Предпочитайте `orElse`, `orElseGet`, `orElseThrow`** методу `get()`.
-3. **Не используйте `Optional` для полей классов и параметров методов** — это увеличивает потребление памяти.
-4. **Применяйте `Optional` как возвращаемый тип** методов, где значение может отсутствовать.
-5. **Не передавайте `Optional` в качестве аргумента** — лучше использовать перегрузку методов.
-
-### 2.8. Композиция функций и предикатов
-
-Функциональные интерфейсы предоставляют методы для композиции, позволяющие строить сложные операции из простых:
-
-**Для `Function`:**
-- `andThen(Function after)` — сначала текущая функция, затем `after`;
-- `compose(Function before)` — сначала `before`, затем текущая функция.
-
-**Для `Predicate`:**
-- `and(Predicate other)` — логическое И;
-- `or(Predicate other)` — логическое ИЛИ;
-- `negate()` — логическое НЕ.
-
-**Для `Consumer`:**
-- `andThen(Consumer after)` — последовательное выполнение.
-
-```java
-// Композиция функций
-Function<Integer, Integer> doubleIt = x -> x * 2;
-Function<Integer, Integer> addThree = x -> x + 3;
-
-Function<Integer, Integer> doubleThenAdd = doubleIt.andThen(addThree);
-Function<Integer, Integer> addThenDouble = doubleIt.compose(addThree);
-
-System.out.println(doubleThenAdd.apply(5));   // (5*2)+3 = 13
-System.out.println(addThenDouble.apply(5));   // (5+3)*2 = 16
-
-// Комбинация предикатов
-Predicate<Integer> isPositive = x -> x > 0;
-Predicate<Integer> isEven = x -> x % 2 == 0;
-
-Predicate<Integer> isPositiveEven = isPositive.and(isEven);
-Predicate<Integer> isPositiveOrEven = isPositive.or(isEven);
-Predicate<Integer> isNotPositive = isPositive.negate();
-
-System.out.println(isPositiveEven.test(4));    // true
-System.out.println(isPositiveEven.test(-4));   // false
-System.out.println(isPositiveOrEven.test(-4)); // true
-```
-
-## 3. Примеры выполнения
-
-### 3.1. Пример 1. Лямбда-выражения и функциональные интерфейсы
-
-```java
-import java.util.*;
-import java.util.function.*;
-
-/**
- * Демонстрация применения лямбда-выражений и функциональных интерфейсов
- * для обработки списка студентов.
- */
-public class LambdaDemo {
-    /**
-     * Запись, моделирующая студента
-     */
-    record Student(String name, String group, double averageGrade, int age) {}
-
-    public static void main(String[] args) {
-        List<Student> students = List.of(
-            new Student("Иванов И.", "ПИ-21", 4.5, 19),
-            new Student("Петров П.", "ПИ-21", 3.8, 20),
-            new Student("Сидоров С.", "ПИ-22", 4.9, 19),
-            new Student("Кузнецов К.", "ПИ-22", 4.2, 21),
-            new Student("Смирнов С.", "ПИ-21", 4.7, 20),
-            new Student("Попов П.", "ПИ-23", 3.5, 18),
-            new Student("Волков В.", "ПИ-23", 4.0, 19),
-            new Student("Зайцев З.", "ПИ-22", 4.6, 20)
-        );
-
-        // 1. Predicate — фильтрация студентов-стипендиатов
-        Predicate<Student> isScholarship = s -> s.averageGrade() >= 4.5;
-        System.out.println("=== Студенты-стипендиаты ===");
-        printFiltered(students, isScholarship);
-
-        // 2. Predicate — комбинация условий
-        Predicate<Student> fromGroup21 = s -> s.group().equals("ПИ-21");
-        Predicate<Student> scholarshipFrom21 = isScholarship.and(fromGroup21);
-        System.out.println("\n=== Стипендиаты из группы ПИ-21 ===");
-        printFiltered(students, scholarshipFrom21);
-
-        // 3. Function — преобразование студента в строку
-        Function<Student, String> toDisplayString =
-            s -> String.format("%s (%s, %.2f)", s.name(), s.group(), s.averageGrade());
-        System.out.println("\n=== Преобразование в строки ===");
-        for (Student s : students) {
-            System.out.println(toDisplayString.apply(s));
-        }
-
-        // 4. Consumer — действие над каждым студентом
-        Consumer<Student> printer = s -> System.out.println("  " + s.name());
-        System.out.println("\n=== Печать имён ===");
-        for (Student s : students) {
-            printer.accept(s);
-        }
-
-        // 5. Supplier — генерация приветствия
-        Supplier<String> greeting = () -> "Добро пожаловать, студент!";
-        System.out.println("\n" + greeting.get());
-
-        // 6. Методные ссылки
-        System.out.println("\n=== Методные ссылки ===");
-        Function<Student, String> nameExtractor = Student::name;
-        Function<String, String> toUpper = String::toUpperCase;
-        Function<Student, String> upperName = nameExtractor.andThen(toUpper);
-
-        for (Student s : students) {
-            System.out.println(upperName.apply(s));
-        }
+public class Counter {
+    private int count = 0;
+    
+    public void increment() {
+        count++; // НЕ АТОМАРНО! Три операции:
+        // 1. Чтение count
+        // 2. Увеличение на 1
+        // 3. Запись count
     }
+    
+    public int getCount() { return count; }
+}
+```
 
-    /**
-     * Выводит студентов, удовлетворяющих предикату
-     */
-    private static void printFiltered(List<Student> students, Predicate<Student> predicate) {
-        for (Student s : students) {
-            if (predicate.test(s)) {
-                System.out.println("  " + s.name() + " — " + s.averageGrade());
-            }
+**Проблема:** Если два потока одновременно вызывают `increment()`, возможна потеря обновления:
+
+```
+Поток A: читает count = 5
+Поток B: читает count = 5
+Поток A: записывает count = 6
+Поток B: записывает count = 6
+Итог: 6 (хотя должно быть 7!)
+```
+
+### 2.5. Синхронизация с synchronized
+
+**Синхронизированный метод:**
+
+```java
+public synchronized void increment() {
+    count++; // Теперь атомарно
+}
+```
+
+**Синхронизированный блок:**
+
+```java
+public void increment() {
+    synchronized (this) {
+        count++;
+    }
+}
+```
+
+**Синхронизированный статический метод:**
+
+```java
+public static synchronized void incrementStatic() {
+    // Синхронизация на объекте класса
+}
+```
+
+### 2.6. volatile
+
+`volatile` гарантирует видимость изменений между потоками, но не обеспечивает атомарность.
+
+```java
+private volatile boolean running = true;
+
+public void stop() {
+    running = false; // Изменение видно всем потокам
+}
+```
+
+**Когда использовать volatile:**
+- Только для простых операций чтения/записи.
+- Для флагов состояния.
+- Для публикации неизменяемых объектов.
+
+### 2.7. wait(), notify(), notifyAll()
+
+Используются для взаимодействия между потоками:
+
+```java
+// Поток-производитель
+synchronized (queue) {
+    while (queue.isFull()) {
+        queue.wait(); // Ожидание места
+    }
+    queue.add(item);
+    queue.notifyAll(); // Уведомление потребителей
+}
+
+// Поток-потребитель
+synchronized (queue) {
+    while (queue.isEmpty()) {
+        queue.wait(); // Ожидание данных
+    }
+    item = queue.remove();
+    queue.notifyAll(); // Уведомление производителей
+}
+```
+
+### 2.8. ReentrantLock
+
+Альтернатива `synchronized` с большей гибкостью:
+
+```java
+import java.util.concurrent.locks.ReentrantLock;
+
+public class BankAccount {
+    private final ReentrantLock lock = new ReentrantLock();
+    private double balance;
+    
+    public void deposit(double amount) {
+        lock.lock();
+        try {
+            balance += amount;
+        } finally {
+            lock.unlock(); // Важно: unlock в finally
         }
     }
 }
 ```
 
-### 3.2. Пример 2. Композиция функций и предикатов
+**Преимущества ReentrantLock:**
+- Можно прервать ожидание (`lockInterruptibly()`)
+- Таймаут при попытке захвата (`tryLock(timeout, unit)`)
+- Более гибкие условия (`newCondition()`)
 
-```java
-import java.util.function.*;
-
-/**
- * Демонстрация композиции функций и предикатов
- * для обработки текстовых данных.
- */
-public class CompositionDemo {
-    public static void main(String[] args) {
-        // 1. Композиция функций для обработки строки
-        Function<String, String> trim = String::trim;
-        Function<String, String> toLower = String::toLowerCase;
-        Function<String, String> removePunctuation =
-            s -> s.replaceAll("[^а-яёa-z0-9\\s]", "");
-        Function<String, String[]> splitToWords =
-            s -> s.split("\\s+");
-
-        // Построение конвейера обработки
-        Function<String, String[]> textProcessor =
-            trim.andThen(toLower)
-                .andThen(removePunctuation)
-                .andThen(splitToWords);
-
-        String text = "  Привет, Мир! Это Тест.  ";
-        String[] words = textProcessor.apply(text);
-
-        System.out.println("=== Обработка текста ===");
-        System.out.println("Исходный: '" + text + "'");
-        System.out.print("Слова: ");
-        for (String word : words) {
-            System.out.print("[" + word + "] ");
-        }
-        System.out.println();
-
-        // 2. Композиция предикатов для валидации
-        Predicate<String> notEmpty = s -> !s.isEmpty();
-        Predicate<String> longerThan2 = s -> s.length() > 2;
-        Predicate<String> startsWithLetter =
-            s -> Character.isLetter(s.charAt(0));
-
-        Predicate<String> validWord =
-            notEmpty.and(longerThan2).and(startsWithLetter);
-
-        System.out.println("\n=== Валидация слов ===");
-        for (String word : words) {
-            System.out.printf("%-10s — %s%n",
-                word, validWord.test(word) ? "валидно" : "невалидно");
-        }
-
-        // 3. Комбинирование предикатов с отрицанием
-        Predicate<String> invalidWord = validWord.negate();
-        System.out.println("\n=== Невалидные слова ===");
-        for (String word : words) {
-            if (invalidWord.test(word)) {
-                System.out.println("  " + word);
-            }
-        }
-
-        // 4. Функции для числовых преобразований
-        Function<Double, Double> celsiusToFahrenheit = c -> c * 9.0 / 5.0 + 32;
-        Function<Double, Double> roundToInteger = Math::round;
-        Function<Double, String> formatTemperature =
-            t -> String.format("%.1f°C = %d°F", t, roundToInteger.apply(celsiusToFahrenheit.apply(t)));
-
-        System.out.println("\n=== Преобразование температур ===");
-        double[] celsiusValues = {0, 20, 36.6, 100};
-        for (double c : celsiusValues) {
-            System.out.println(formatTemperature.apply(c));
-        }
-    }
-}
-```
-
-### 3.3. Пример 3. Паттерн `Optional` для безопасной работы с данными
-
-```java
-import java.util.*;
-
-/**
- * Демонстрация применения Optional для безопасной работы
- * с возможными отсутствующими значениями.
- */
-public class OptionalDemo {
-    /**
-     * Запись, моделирующая пользователя
-     */
-    record User(String id, String name, String email, String phone) {}
-
-    /**
-     * Хранилище пользователей
-     */
-    static class UserRepository {
-        private final Map<String, User> users = new HashMap<>();
-
-        public UserRepository() {
-            users.put("U001", new User("U001", "Иванов И.", "ivanov@example.com", "+79001234567"));
-            users.put("U002", new User("U002", "Петров П.", "petrov@example.com", null));
-            users.put("U003", new User("U003", "Сидоров С.", null, "+79007654321"));
-        }
-
-        /**
-         * Возвращает пользователя, обёрнутого в Optional.
-         * Если пользователь не найден — возвращается Optional.empty().
-         */
-        public Optional<User> findById(String id) {
-            return Optional.ofNullable(users.get(id));
-        }
-    }
-
-    public static void main(String[] args) {
-        UserRepository repository = new UserRepository();
-
-        // 1. Базовое применение Optional
-        System.out.println("=== Поиск пользователей ===");
-        String[] ids = {"U001", "U002", "U003", "U999"};
-        for (String id : ids) {
-            Optional<User> user = repository.findById(id);
-            System.out.printf("ID %s: %s%n",
-                id,
-                user.isPresent() ? user.get().name() : "не найден");
-        }
-
-        // 2. orElse — значение по умолчанию
-        System.out.println("\n=== Значения по умолчанию ===");
-        User defaultUser = new User("UNKNOWN", "Неизвестный", "", "");
-        for (String id : ids) {
-            User user = repository.findById(id).orElse(defaultUser);
-            System.out.println("ID " + id + ": " + user.name());
-        }
-
-        // 3. orElseThrow — бросить исключение при отсутствии
-        System.out.println("\n=== Обработка отсутствующих ===");
-        for (String id : ids) {
-            try {
-                User user = repository.findById(id)
-                    .orElseThrow(() -> new NoSuchElementException(
-                        "Пользователь " + id + " не найден"));
-                System.out.println("Найден: " + user.name());
-            } catch (NoSuchElementException e) {
-                System.out.println("Ошибка: " + e.getMessage());
-            }
-        }
-
-        // 4. map — преобразование значения внутри Optional
-        System.out.println("\n=== Преобразование email в верхний регистр ===");
-        for (String id : ids) {
-            Optional<String> upperEmail = repository.findById(id)
-                .map(User::email)
-                .filter(Objects::nonNull)
-                .map(String::toUpperCase);
-            System.out.printf("ID %s: %s%n",
-                id,
-                upperEmail.orElse("email отсутствует"));
-        }
-
-        // 5. ifPresent — выполнение действия при наличии значения
-        System.out.println("\n=== Уведомления ===");
-        for (String id : ids) {
-            repository.findById(id)
-                .map(User::email)
-                .filter(Objects::nonNull)
-                .ifPresent(email ->
-                    System.out.println("Уведомление отправлено на " + email));
-        }
-
-        // 6. ifPresentOrElse — действие или альтернатива (Java 9+)
-        System.out.println("\n=== Обработка с альтернативой ===");
-        for (String id : ids) {
-            repository.findById(id)
-                .ifPresentOrElse(
-                    user -> System.out.println("Пользователь: " + user.name()),
-                    () -> System.out.println("ID " + id + ": пользователь не найден")
-                );
-        }
-
-        // 7. Цепочка преобразований с фильтрацией
-        System.out.println("\n=== Телефоны пользователей с email ===");
-        for (String id : ids) {
-            Optional<String> phone = repository.findById(id)
-                .filter(user -> user.email() != null)   // только если есть email
-                .map(User::phone)
-                .filter(Objects::nonNull);              // и если есть телефон
-            System.out.printf("ID %s: %s%n",
-                id,
-                phone.orElse("телефон недоступен"));
-        }
-    }
-}
-```
-
-## 4. Задания на паре
-
-### Задание 4.1. Обработка списка сотрудников с использованием функциональных интерфейсов
-
-Разработайте программу, выполняющую обработку списка сотрудников с применением функциональных интерфейсов.
-
-**Запись `Employee`:**
-- Компоненты: `id` (String), `name` (String), `department` (String), `position` (String), `salary` (double), `hireDate` (LocalDate).
-
-**Требования к реализации:**
-
-1. Создайте список не менее чем из 10 сотрудников.
-2. Реализуйте следующие операции с использованием функциональных интерфейсов:
-   - `Predicate<Employee>` — фильтрация сотрудников по различным критериям (зарплата выше порога, определённый отдел, стаж более N лет);
-   - `Function<Employee, String>` — преобразование сотрудника в строку заданного формата;
-   - `Consumer<Employee>` — выполнение действия над каждым сотрудником (например, повышение зарплаты на процент);
-   - `Comparator<Employee>` — сортировка по различным полям (зарплата, имя, дата приёма);
-   - `BiPredicate<Employee, Employee>` — сравнение двух сотрудников по заданному критерию.
-3. Реализуйте метод `processEmployees(List<Employee>, Predicate<Employee>, Consumer<Employee>)`, применяющий предикат и потребитель ко всем элементам списка.
-4. Продемонстрируйте композицию предикатов и функций.
-
-**Пример выполнения программы:**
+### 2.9. Паттерн Producer-Consumer
 
 ```
-=== Сотрудники с зарплатой выше 100000 ===
-Иванов И. (Разработка, Senior) — 150000 руб.
-Петров П. (Аналитика, Lead) — 180000 руб.
-
-=== Повышение зарплаты на 10% для отдела Разработки ===
-Иванов И.: 150000 → 165000 руб.
-Сидоров С.: 120000 → 132000 руб.
-
-=== Сортировка по зарплате (убывание) ===
-1. Петров П. — 180000 руб.
-2. Иванов И. — 165000 руб.
-...
+Producer → [Buffer/Queue] → Consumer
+   ↓            ↓              ↓
+Создаёт      Хранит       Обрабатывает
+данные       данные        данные
 ```
-
----
-
-### Задание 4.2. Конвейер обработки текстовых данных
-
-Разработайте программу, выполняющую многоступенчатую обработку текстовых данных с применением композиции функций и предикатов.
-
-**Требования к реализации:**
-
-1. Реализуйте набор функций `Function<String, String>` для обработки текста:
-   - удаление лишних пробелов;
-   - приведение к нижнему регистру;
-   - удаление знаков препинания;
-   - замена специальных символов;
-   - транслитерация (по выбору);
-   - нормализация пробелов.
-
-2. Постройте конвейер обработки, используя `andThen`, применяющий все функции в заданном порядке.
-
-3. Реализуйте набор предикатов `Predicate<String>` для валидации:
-   - проверка длины;
-   - проверка отсутствия запрещённых слов;
-   - проверка соответствия шаблону;
-   - проверка отсутствия цифр.
-
-4. Скомбинируйте предикаты с помощью `and`, `or`, `negate` для построения сложных правил валидации.
-
-5. Реализуйте метод `processText(String text, Function<String, String> pipeline, Predicate<String> validator)`, возвращающий `Optional<String>` — результат обработки, если валидация пройдена.
-
-6. Продемонстрируйте работу с различными входными данными, включая некорректные.
-
----
-
-### Задание 4.3. Система поиска с использованием `Optional` и функциональных интерфейсов
-
-Разработайте систему поиска сущностей с применением `Optional` и функциональных интерфейсов.
-
-**Запись `Book`:**
-- Компоненты: `isbn` (String), `title` (String), `author` (String), `year` (int), `genre` (String), `rating` (double), `availableCopies` (int).
-
-**Класс `Library`:**
-- Поле: `books` (список книг).
-- Методы:
-  - `Optional<Book> findByIsbn(String isbn)` — поиск по ISBN;
-  - `Optional<Book> findFirstBy(Predicate<Book> predicate)` — первая книга по предикату;
-  - `List<Book> findAllBy(Predicate<Book> predicate)` — все книги по предикату;
-  - `Optional<String> getAuthorByIsbn(String isbn)` — получение автора по ISBN (цепочка `Optional`);
-  - `double getAverageRating(String genre)` — средний рейтинг по жанру;
-  - `List<Book> getTopRated(int n)` — топ-N книг по рейтингу.
 
 **Требования:**
+- Producer не должен добавлять данные в полную очередь.
+- Consumer не должен забирать данные из пустой очереди.
+- Доступ к очереди должен быть синхронизирован.
 
-1. Все методы поиска возвращают `Optional` или коллекции.
-2. Применяйте `map`, `filter`, `orElse`, `orElseThrow` для работы с `Optional`.
-3. Используйте `Comparator` для сортировки.
-4. Реализуйте композицию предикатов для сложных запросов (например, «книги определённого жанра с рейтингом выше порога, доступные для выдачи»).
-5. Продемонстрируйте обработку всех сценариев, включая отсутствие результатов.
+---
 
-**Пример выполнения программы:**
+## 3. Задание на паре
+
+### Задача. Банковский счёт и гонка данных
+
+1. **Создать класс `BankAccount`:**
+   - Поле `balance` (double).
+   - Методы `deposit(double amount)` и `withdraw(double amount)`.
+   - Метод `getBalance()`.
+
+2. **Создать класс `Client` (Runnable):**
+   - Выполняет 1000 операций: случайное пополнение или снятие.
+   - Сумма операции: 1-100.
+   - При снятии проверять, что баланс не уходит в минус.
+
+3. **Реализовать без синхронизации:**
+   - Запустить 10 потоков-клиентов.
+   - Продемонстрировать некорректный итоговый баланс (race condition).
+
+4. **Добавить синхронизацию:**
+   - Использовать `synchronized` для методов `deposit` и `withdraw`.
+   - Убедиться, что баланс сходится.
+
+5. **Сравнить производительность:**
+   - Замерить время выполнения синхронизированной версии.
+   - Сравнить с несинхронизированной.
+
+6. **Реализовать альтернативу через `ReentrantLock`:**
+   - Сравнить по времени и читаемости.
+
+**Пример выполнения:**
+```
+=== Без синхронизации ===
+Итоговый баланс: 15423.50 (ожидалось: ~15500.00)
+Ошибка: ~76.50
+
+=== С synchronized ===
+Итоговый баланс: 15499.50 (ожидалось: ~15500.00)
+Время выполнения: 125 мс
+
+=== С ReentrantLock ===
+Итоговый баланс: 15499.50 (ожидалось: ~15500.00)
+Время выполнения: 132 мс
+```
+
+### Применение ИИ-инструмента
+
+**Промпт для YandexGPT:**
+```
+Объясни причину расхождения баланса в несинхронизированной версии банковского счёта.
+
+Код:
+public class BankAccount {
+    private double balance;
+    
+    public void deposit(double amount) {
+        balance += amount;
+    }
+    
+    public void withdraw(double amount) {
+        if (balance >= amount) {
+            balance -= amount;
+        }
+    }
+}
+
+Запускается 10 потоков, каждый выполняет 1000 операций.
+Почему итоговый баланс не совпадает с ожидаемым?
+```
+
+**Анализ результата:**
+- Проверить качество объяснения.
+- Проверить, упоминает ли ИИ операции чтения-изменения-записи.
+- Проверить, упоминает ли ИИ проблему видимости (cache).
+- Проверить, даёт ли ИИ рекомендации по исправлению.
+
+---
+
+## 4. Индивидуальные задания (30 вариантов)
+
+Каждый вариант содержит:
+- Класс с общими данными.
+- Задачу для параллельного выполнения.
+- Количество потоков и операций.
+
+---
+
+### Вариант 1. Банковский счёт
+
+**Класс:** `BankAccount` (balance)
+
+**Операция:** Пополнение или снятие (случайно)
+
+**Потоки:** 10
+
+**Операций:** 1000 каждый
+
+**Особенность:** Не уходить в минус
+
+---
+
+### Вариант 2. Счётчик
+
+**Класс:** `Counter` (count)
+
+**Операция:** Инкремент
+
+**Потоки:** 5
+
+**Операций:** 100000 каждый
+
+**Особенность:** Сравнение volatile vs synchronized
+
+---
+
+### Вариант 3. Список
+
+**Класс:** `SharedList` (List<Integer>)
+
+**Операция:** Добавление элемента
+
+**Потоки:** 8
+
+**Операций:** 5000 каждый
+
+**Особенность:** ArrayList vs Vector
+
+---
+
+### Вариант 4. Банкомат
+
+**Класс:** `ATM` (balance, transactionCount)
+
+**Операция:** Пополнение и снятие
+
+**Потоки:** 5
+
+**Операций:** 2000 каждый
+
+**Особенность:** ReentrantLock vs synchronized
+
+---
+
+### Вариант 5. Склад
+
+**Класс:** `Warehouse` (stock)
+
+**Операция:** Добавление и удаление товара
+
+**Потоки:** 3 производителя, 3 потребителя
+
+**Операций:** 1000 каждый
+
+**Особенность:** Producer-Consumer
+
+---
+
+### Вариант 6. Матрица
+
+**Класс:** `Matrix` (double[][])
+
+**Операция:** Сложение матриц
+
+**Потоки:** 4
+
+**Операций:** 1 (разбиение на части)
+
+**Особенность:** Параллельные вычисления
+
+---
+
+### Вариант 7. Гоночная машина
+
+**Класс:** `Car` (speed, fuel)
+
+**Операция:** Ускорение и расход топлива
+
+**Потоки:** 10
+
+**Операций:** 500 каждый
+
+**Особенность:** Проверка ограничений
+
+---
+
+### Вариант 8. Биржа
+
+**Класс:** `StockExchange` (price, volume)
+
+**Операция:** Покупка и продажа акций
+
+**Потоки:** 8
+
+**Операций:** 1000 каждый
+
+**Особенность:** Цена зависит от объёма
+
+---
+
+### Вариант 9. Очередь
+
+**Класс:** `Queue` (LinkedList)
+
+**Операция:** Добавление и извлечение
+
+**Потоки:** 4 производителя, 4 потребителя
+
+**Операций:** 2000 каждый
+
+**Особенность:** wait/notify
+
+---
+
+### Вариант 10. Парковка
+
+**Класс:** `Parking` (spots)
+
+**Операция:** Заезд и выезд
+
+**Потоки:** 15
+
+**Операций:** 500 каждый
+
+**Особенность:** Ограниченное количество мест
+
+---
+
+### Вариант 11. Библиотека
+
+**Класс:** `Library` (books)
+
+**Операция:** Взятие и возврат книги
+
+**Потоки:** 10
+
+**Операций:** 300 каждый
+
+**Особенность:** Уникальные книги (Set)
+
+---
+
+### Вариант 12. Касса
+
+**Класс:** `Cashier` (total, count)
+
+**Операция:** Продажа билета
+
+**Потоки:** 6
+
+**Операций:** 1000 каждый
+
+**Особенность:** Лимит билетов
+
+---
+
+### Вариант 13. Игровой счёт
+
+**Класс:** `GameScore` (score, level)
+
+**Операция:** Начисление очков
+
+**Потоки:** 8
+
+**Операций:** 2000 каждый
+
+**Особенность:** Повышение уровня
+
+---
+
+### Вариант 14. Менеджер задач
+
+**Класс:** `TaskManager` (tasks)
+
+**Операция:** Добавление и выполнение
+
+**Потоки:** 5
+
+**Операций:** 1000 каждый
+
+**Особенность:** Пул потоков
+
+---
+
+### Вариант 15. Теплица
+
+**Класс:** `Greenhouse` (temperature, humidity)
+
+**Операция:** Изменение параметров
+
+**Потоки:** 4
+
+**Операций:** 1500 каждый
+
+**Особенность:** Диапазон значений
+
+---
+
+### Вариант 16. Футбольный матч
+
+**Класс:** `FootballMatch` (score1, score2)
+
+**Операция:** Гол
+
+**Потоки:** 5
+
+**Операций:** 100 каждый
+
+**Особенность:** Команды-потоки
+
+---
+
+### Вариант 17. Лифт
+
+**Класс:** `Elevator` (floor, passengers)
+
+**Операция:** Перемещение
+
+**Потоки:** 6
+
+**Операций:** 300 каждый
+
+**Особенность:** Ограничение пассажиров
+
+---
+
+### Вариант 18. Кафе
+
+**Класс:** `Cafe` (orders, cooks)
+
+**Операция:** Приём и выполнение заказов
+
+**Потоки:** 4
+
+**Операций:** 500 каждый
+
+**Особенность:** Producer-Consumer
+
+---
+
+### Вариант 19. Светофор
+
+**Класс:** `TrafficLight` (state)
+
+**Операция:** Смена состояния
+
+**Потоки:** 3
+
+**Операций:** 1000 каждый
+
+**Особенность:** Очерёдность состояний
+
+---
+
+### Вариант 20. Автобус
+
+**Класс:** `Bus` (passengers)
+
+**Операция:** Вход и выход
+
+**Потоки:** 10
+
+**Операций:** 500 каждый
+
+**Особенность:** Ограничение мест
+
+---
+
+### Вариант 21. Ресторан
+
+**Класс:** `Restaurant` (tables, waiters)
+
+**Операция:** Посадка и обслуживание
+
+**Потоки:** 8
+
+**Операций:** 200 каждый
+
+**Особенность:** ReentrantLock
+
+---
+
+### Вариант 22. Банк
+
+**Класс:** `Bank` (accounts)
+
+**Операция:** Перевод между счетами
+
+**Потоки:** 5
+
+**Операций:** 500 каждый
+
+**Особенность:** Два счёта (deadlock риск)
+
+---
+
+### Вариант 23. Поиск
+
+**Класс:** `ArraySearch` (int[])
+
+**Операция:** Поиск элемента
+
+**Потоки:** 4
+
+**Операций:** 1
+
+**Особенность:** Разбиение массива
+
+---
+
+### Вариант 24. Космический корабль
+
+**Класс:** `Spaceship` (fuel, health)
+
+**Операция:** Маневры
+
+**Потоки:** 6
+
+**Операций:** 400 каждый
+
+**Особенность:** Ограничения ресурсов
+
+---
+
+### Вариант 25. Строительство
+
+**Класс:** `Construction` (materials, workers)
+
+**Операция:** Использование материалов
+
+**Потоки:** 8
+
+**Операций:** 300 каждый
+
+**Особенность:** wait/notify
+
+---
+
+### Вариант 26. Билеты в кино
+
+**Класс:** `Cinema` (seats)
+
+**Операция:** Бронирование места
+
+**Потоки:** 10
+
+**Операций:** 50 каждый
+
+**Особенность:** Уникальные места
+
+---
+
+### Вариант 27. Онлайн-магазин
+
+**Класс:** `Shop` (items)
+
+**Операция:** Покупка товара
+
+**Потоки:** 5
+
+**Операций:** 1000 каждый
+
+**Особенность:** Ограничение количества
+
+---
+
+### Вариант 28. Спортзал
+
+**Класс:** `Gym` (machines)
+
+**Операция:** Занятие тренажёром
+
+**Потоки:** 12
+
+**Операций:** 200 каждый
+
+**Особенность:** Таймаут ожидания
+
+---
+
+### Вариант 29. Почта
+
+**Класс:** `PostOffice` (letters)
+
+**Операция:** Отправка и доставка
+
+**Потоки:** 4
+
+**Операций:** 1000 каждый
+
+**Особенность:** BlockingQueue
+
+---
+
+### Вариант 30. Завод
+
+**Класс:** `Factory` (details)
+
+**Операция:** Производство и сборка
+
+**Потоки:** 6
+
+**Операций:** 500 каждый
+
+**Особенность:** Два этапа производства
+
+---
+
+## 5. Методические указания
+
+### 5.1. Структура проекта
 
 ```
-=== Поиск по ISBN ===
-ISBN 978-5-17-090767-7: Мастер и Маргарита (М. Булгаков, 1967)
-ISBN 000-0-00-000000-0: не найдена
-
-=== Автор по ISBN ===
-ISBN 978-5-17-090767-7 → М. Булгаков
-ISBN 000-0-00-000000-0 → автор недоступен
-
-=== Топ-3 книги по рейтингу ===
-1. Война и мир — 4.9
-2. Мастер и Маргарита — 4.8
-3. Преступление и наказание — 4.7
-
-=== Книги жанра 'Роман' с рейтингом >= 4.5 ===
-- Война и мир (Л. Толстой, 4.9)
-- Мастер и Маргарита (М. Булгаков, 4.8)
+src/
+├── main/
+│   ├── java/
+│   │   ├── model/
+│   │   │   └── BankAccount.java
+│   │   ├── thread/
+│   │   │   └── ClientThread.java
+│   │   ├── executor/
+│   │   │   └── AccountSimulator.java
+│   │   └── Main.java
+│   └── resources/
+│       └── logback.xml
+└── test/
+    └── java/
+        └── model/
+            └── BankAccountTest.java
 ```
 
-## 5. Задание для самостоятельной работы
+### 5.2. Шаблон BankAccount (без синхронизации)
 
-Разработать систему согласно своему варианту с активным применением функциональных интерфейсов, лямбда-выражений, методных ссылок и `Optional`. Требования:
+```java
+package model;
 
-1. Применение не менее 4 различных функциональных интерфейсов (`Predicate`, `Function`, `Consumer`, `Supplier`, `BiFunction` и т. п.).
-2. Применение методных ссылок не менее чем в 3 местах.
-3. Применение `Optional` не менее чем в 2 методах.
-4. Применение композиции функций или предикатов.
-5. Обработка граничных случаев и отсутствующих значений.
-6. Демонстрационный класс с не менее чем 6 сценариями.
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-### Варианты заданий
+public class BankAccount {
+    private static final Logger logger = LoggerFactory.getLogger(BankAccount.class);
+    private double balance;
+    private final String accountNumber;
+    
+    public BankAccount(String accountNumber, double initialBalance) {
+        this.accountNumber = accountNumber;
+        this.balance = initialBalance;
+        logger.info("Счёт {} открыт с балансом {}", accountNumber, initialBalance);
+    }
+    
+    public void deposit(double amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Сумма должна быть положительной");
+        }
+        balance += amount;
+        logger.debug("Счёт {}: пополнение на {}, баланс: {}", accountNumber, amount, balance);
+    }
+    
+    public void withdraw(double amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Сумма должна быть положительной");
+        }
+        if (balance >= amount) {
+            balance -= amount;
+            logger.debug("Счёт {}: снятие на {}, баланс: {}", accountNumber, amount, balance);
+        } else {
+            logger.warn("Счёт {}: недостаточно средств для снятия {}", accountNumber, amount);
+        }
+    }
+    
+    public double getBalance() {
+        return balance;
+    }
+    
+    @Override
+    public String toString() {
+        return String.format("BankAccount{accountNumber='%s', balance=%.2f}", accountNumber, balance);
+    }
+}
+```
 
-**Вариант 1.** Система «Библиотека». Поиск книг по различным критериям, фильтрация по жанру и рейтингу, получение информации об авторе по ISBN, расчёт статистики.
+### 5.3. Шаблон ClientThread
 
-**Вариант 2.** Система «Авиакомпания». Поиск рейсов по параметрам, фильтрация по статусу и времени, расчёт стоимости, получение информации о пассажирах.
+```java
+package thread;
 
-**Вариант 3.** Система «Банк». Поиск счетов по клиентам, фильтрация по балансу и статусу, расчёт процентов, получение информации о транзакциях.
+import model.BankAccount;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-**Вариант 4.** Система «Интернет-магазин». Поиск товаров по категории и цене, фильтрация по рейтингу и наличию, расчёт стоимости корзины, получение информации о заказах.
+import java.util.Random;
 
-**Вариант 5.** Система «Больница». Поиск пациентов по диагнозу, фильтрация по возрасту и врачу, расчёт стоимости лечения, получение информации о назначениях.
+public class ClientThread implements Runnable {
+    private static final Logger logger = LoggerFactory.getLogger(ClientThread.class);
+    private final BankAccount account;
+    private final int operationsCount;
+    private final Random random = new Random();
+    private int successfulOperations = 0;
+    private int failedOperations = 0;
+    
+    public ClientThread(BankAccount account, int operationsCount) {
+        this.account = account;
+        this.operationsCount = operationsCount;
+    }
+    
+    @Override
+    public void run() {
+        String threadName = Thread.currentThread().getName();
+        logger.info("{} начал работу", threadName);
+        
+        long startTime = System.currentTimeMillis();
+        
+        for (int i = 0; i < operationsCount; i++) {
+            double amount = 1 + random.nextDouble() * 99; // 1-100
+            boolean isDeposit = random.nextBoolean();
+            
+            try {
+                if (isDeposit) {
+                    account.deposit(amount);
+                    successfulOperations++;
+                } else {
+                    account.withdraw(amount);
+                    successfulOperations++;
+                }
+            } catch (Exception e) {
+                failedOperations++;
+                logger.error("{} ошибка при операции: {}", threadName, e.getMessage());
+            }
+        }
+        
+        long duration = System.currentTimeMillis() - startTime;
+        logger.info("{} завершил работу. Операций: {}, успешно: {}, ошибок: {}, время: {} мс",
+                threadName, operationsCount, successfulOperations, failedOperations, duration);
+    }
+    
+    public int getSuccessfulOperations() { return successfulOperations; }
+    public int getFailedOperations() { return failedOperations; }
+}
+```
 
-**Вариант 6.** Система «Университет». Поиск студентов по группе и баллу, фильтрация по курсу и статусу, расчёт среднего балла, получение информации о преподавателях.
+### 5.4. Шаблон BankAccount (с synchronized)
 
-**Вариант 7.** Система «Ресторан». Поиск блюд по категории и цене, фильтрация по рейтингу и наличию, расчёт стоимости заказа, получение информации о поварах.
+```java
+package model;
 
-**Вариант 8.** Система «Фитнес-клуб». Поиск клиентов по типу абонемента, фильтрация по сроку действия, расчёт стоимости посещения, получение информации о тренерах.
+public class BankAccount {
+    private double balance;
+    private final String accountNumber;
+    
+    public BankAccount(String accountNumber, double initialBalance) {
+        this.accountNumber = accountNumber;
+        this.balance = initialBalance;
+    }
+    
+    public synchronized void deposit(double amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Сумма должна быть положительной");
+        }
+        balance += amount;
+    }
+    
+    public synchronized void withdraw(double amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Сумма должна быть положительной");
+        }
+        if (balance >= amount) {
+            balance -= amount;
+        }
+    }
+    
+    public synchronized double getBalance() {
+        return balance;
+    }
+}
+```
 
-**Вариант 9.** Система «Автосервис». Поиск заказов-нарядов по статусу, фильтрация по мастеру и сроку, расчёт стоимости работ, получение информации об автомобилях.
+### 5.5. Шаблон BankAccount (с ReentrantLock)
 
-**Вариант 10.** Система «Турагентство». Поиск туров по стране и типу, фильтрация по цене и рейтингу, расчёт стоимости, получение информации об отелях.
+```java
+package model;
 
-**Вариант 11.** Система «Кинотеатр». Поиск фильмов по жанру и рейтингу, фильтрация по времени сеанса, расчёт стоимости билетов, получение информации о залах.
+import java.util.concurrent.locks.ReentrantLock;
 
-**Вариант 12.** Система «Склад». Поиск товаров по категории, фильтрация по остатку и поставщику, расчёт стоимости, получение информации о поставках.
+public class BankAccount {
+    private final ReentrantLock lock = new ReentrantLock();
+    private double balance;
+    private final String accountNumber;
+    
+    public BankAccount(String accountNumber, double initialBalance) {
+        this.accountNumber = accountNumber;
+        this.balance = initialBalance;
+    }
+    
+    public void deposit(double amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Сумма должна быть положительной");
+        }
+        lock.lock();
+        try {
+            balance += amount;
+        } finally {
+            lock.unlock();
+        }
+    }
+    
+    public void withdraw(double amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Сумма должна быть положительной");
+        }
+        lock.lock();
+        try {
+            if (balance >= amount) {
+                balance -= amount;
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+    
+    public double getBalance() {
+        lock.lock();
+        try {
+            return balance;
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+```
 
-**Вариант 13.** Система «Страховая компания». Поиск полисов по типу и клиенту, фильтрация по сроку действия, расчёт выплат, получение информации о страховых случаях.
+### 5.6. Шаблон симулятора
 
-**Вариант 14.** Система «Почта». Поиск отправлений по статусу, фильтрация по типу и адресу, расчёт стоимости доставки, получение информации о маршрутах.
+```java
+package executor;
 
-**Вариант 15.** Система «Агентство недвижимости». Поиск объектов по типу и району, фильтрация по цене и площади, расчёт стоимости, получение информации о клиентах.
+import model.BankAccount;
+import thread.ClientThread;
 
-**Вариант 16.** Система «Кадровое агентство». Поиск кандидатов по навыкам, фильтрация по опыту и зарплате, расчёт рейтинга, получение информации о вакансиях.
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
-**Вариант 17.** Система «Благотворительный фонд». Поиск кампаний по типу, фильтрация по сроку и сумме, расчёт собранных средств, получение информации о жертвователях.
+public class AccountSimulator {
+    private final BankAccount account;
+    private final int threadCount;
+    private final int operationsPerThread;
+    private final String mode;
+    
+    public AccountSimulator(BankAccount account, int threadCount, int operationsPerThread, String mode) {
+        this.account = account;
+        this.threadCount = threadCount;
+        this.operationsPerThread = operationsPerThread;
+        this.mode = mode;
+    }
+    
+    public SimulationResult run() {
+        System.out.println("\n=== " + mode + " ===");
+        
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+        List<ClientThread> clients = new ArrayList<>();
+        
+        long startTime = System.currentTimeMillis();
+        
+        for (int i = 0; i < threadCount; i++) {
+            ClientThread client = new ClientThread(account, operationsPerThread);
+            clients.add(client);
+            executor.submit(() -> {
+                try {
+                    client.run();
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        
+        try {
+            latch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        
+        long duration = System.currentTimeMillis() - startTime;
+        
+        int totalOperations = clients.stream()
+            .mapToInt(ClientThread::getSuccessfulOperations)
+            .sum();
+        int totalErrors = clients.stream()
+            .mapToInt(ClientThread::getFailedOperations)
+            .sum();
+        
+        return new SimulationResult(
+            mode,
+            account.getBalance(),
+            totalOperations,
+            totalErrors,
+            duration
+        );
+    }
+    
+    public static class SimulationResult {
+        private final String mode;
+        private final double finalBalance;
+        private final int totalOperations;
+        private final int totalErrors;
+        private final long durationMs;
+        
+        public SimulationResult(String mode, double finalBalance, int totalOperations, 
+                                int totalErrors, long durationMs) {
+            this.mode = mode;
+            this.finalBalance = finalBalance;
+            this.totalOperations = totalOperations;
+            this.totalErrors = totalErrors;
+            this.durationMs = durationMs;
+        }
+        
+        @Override
+        public String toString() {
+            return String.format(
+                "%s:\n" +
+                "  Итоговый баланс: %.2f\n" +
+                "  Всего операций: %d\n" +
+                "  Ошибок: %d\n" +
+                "  Время: %d мс",
+                mode, finalBalance, totalOperations, totalErrors, durationMs
+            );
+        }
+    }
+}
+```
 
-**Вариант 18.** Система «Такси». Поиск заказов по статусу, фильтрация по району и времени, расчёт стоимости поездки, получение информации о водителях.
+### 5.7. Основной класс
 
-**Вариант 19.** Система «Музей». Поиск экспонатов по типу и эпохе, фильтрация по залу и стоимости, расчёт посещаемости, получение информации о выставках.
+```java
+import model.BankAccount;
+import executor.AccountSimulator;
 
-**Вариант 20.** Система «Спортивный клуб». Поиск спортсменов по виду спорта, фильтрация по разряду и возрасту, расчёт рейтинга, получение информации о соревнованиях.
+public class Main {
+    private static final int THREAD_COUNT = 10;
+    private static final int OPERATIONS_PER_THREAD = 1000;
+    private static final double INITIAL_BALANCE = 10000.0;
+    
+    public static void main(String[] args) {
+        System.out.println("=== Многопоточность: банковский счёт ===\n");
+        
+        // 1. Без синхронизации
+        BankAccount accountNoSync = new BankAccount("ACC001", INITIAL_BALANCE);
+        AccountSimulator simulatorNoSync = new AccountSimulator(
+            accountNoSync, THREAD_COUNT, OPERATIONS_PER_THREAD, "Без синхронизации"
+        );
+        AccountSimulator.SimulationResult resultNoSync = simulatorNoSync.run();
+        System.out.println(resultNoSync);
+        
+        // 2. С synchronized
+        BankAccount accountSync = new BankAccount("ACC002", INITIAL_BALANCE);
+        AccountSimulator simulatorSync = new AccountSimulator(
+            accountSync, THREAD_COUNT, OPERATIONS_PER_THREAD, "С synchronized"
+        );
+        AccountSimulator.SimulationResult resultSync = simulatorSync.run();
+        System.out.println(resultSync);
+        
+        // 3. С ReentrantLock
+        BankAccount accountLock = new BankAccount("ACC003", INITIAL_BALANCE);
+        AccountSimulator simulatorLock = new AccountSimulator(
+            accountLock, THREAD_COUNT, OPERATIONS_PER_THREAD, "С ReentrantLock"
+        );
+        AccountSimulator.SimulationResult resultLock = simulatorLock.run();
+        System.out.println(resultLock);
+        
+        // Сравнение
+        System.out.println("\n=== Сравнение ===");
+        System.out.printf("Ожидаемый баланс: ~%.2f%n", INITIAL_BALANCE);
+        System.out.printf("Без синхронизации: %.2f (отклонение: %.2f)%n", 
+            resultNoSync.getFinalBalance(), 
+            Math.abs(resultNoSync.getFinalBalance() - INITIAL_BALANCE));
+        System.out.printf("С synchronized: %.2f (отклонение: %.2f)%n",
+            resultSync.getFinalBalance(),
+            Math.abs(resultSync.getFinalBalance() - INITIAL_BALANCE));
+        System.out.printf("С ReentrantLock: %.2f (отклонение: %.2f)%n",
+            resultLock.getFinalBalance(),
+            Math.abs(resultLock.getFinalBalance() - INITIAL_BALANCE));
+        System.out.printf("Время (synchronized): %d мс%n", resultSync.getDurationMs());
+        System.out.printf("Время (ReentrantLock): %d мс%n", resultLock.getDurationMs());
+    }
+}
+```
 
-**Вариант 21.** Система «Почтовый клиент». Поиск писем по отправителю и теме, фильтрация по дате и статусу, расчёт размера ящика, получение информации о контактах.
+---
 
-**Вариант 22.** Система «Календарь». Поиск событий по дате и типу, фильтрация по участникам и месту, расчёт длительности, получение информации о напоминаниях.
+## 6. Контрольные вопросы
 
-**Вариант 23.** Система «Платёжная система». Поиск платежей по статусу и методу, фильтрация по сумме и дате, расчёт комиссий, получение информации о merchants.
+1. Что такое процесс и что такое поток? В чём их различие?
 
-**Вариант 24.** Система «Управление проектами». Поиск задач по статусу и исполнителю, фильтрация по приоритету и сроку, расчёт загрузки, получение информации о проектах.
+2. Какие способы создания потоков существуют в Java?
 
-**Вариант 25.** Система «Ветеринарная клиника». Поиск животных по виду и владельцу, фильтрация по возрасту и диагнозу, расчёт стоимости приёма, получение информации о врачах.
+3. Почему нельзя просто вызвать `run()` для запуска потока?
 
-**Вариант 26.** Система «Железнодорожные перевозки». Поиск поездов по маршруту, фильтрация по времени и типу, расчёт стоимости билетов, получение информации о вагонах.
+4. Какие состояния может принимать поток?
 
-**Вариант 27.** Система «Языковые курсы». Поиск студентов по уровню и группе, фильтрация по посещаемости и баллу, расчёт прогресса, получение информации о преподавателях.
+5. Что такое гонка данных (race condition)? Приведите пример.
 
-**Вариант 28.** Система «Фотостудия». Поиск фотосессий по типу и клиенту, фильтрация по дате и стоимости, расчёт количества фотографий, получение информации о фотографах.
+6. Как `synchronized` решает проблему гонки данных?
 
-**Вариант 29.** Система «Коворкинг». Поиск рабочих мест по типу и району, фильтрация по цене и доступности, расчёт стоимости бронирования, получение информации о резидентах.
+7. В чём разница между `synchronized` методом и `synchronized` блоком?
 
-**Вариант 30.** Система «Платформа подкастов». Поиск подкастов по категории и автору, фильтрация по рейтингу и длительности, расчёт статистики прослушиваний, получение информации о подписчиках.
+8. Что делает ключевое слово `volatile`? Когда его использовать?
 
-## 6. Методические указания к самостоятельной работе
+9. Для чего используются методы `wait()`, `notify()`, `notifyAll()`?
 
-1. **Проектирование функциональных интерфейсов.** Перед реализацией определите:
-   - какие операции требуют предикатов (фильтрация, проверка);
-   - какие операции требуют функций (преобразование, извлечение);
-   - какие операции требуют потребителей (печать, логирование, модификация);
-   - какие операции требуют поставщиков (генерация значений, фабрики).
+10. Чем `ReentrantLock` отличается от `synchronized`?
 
-2. **Применение методных ссылок.** Используйте методные ссылки вместо лямбда-выражений, когда лямбда просто делегирует вызов существующему методу:
-   - `x -> x.length()` → `String::length`;
-   - `x -> System.out.println(x)` → `System.out::println`;
-   - `x -> new ArrayList(x)` → `ArrayList::new`.
+11. Почему в `ReentrantLock` нужно вызывать `unlock()` в `finally`?
 
-3. **Применение `Optional`.** Применяйте `Optional` как возвращаемый тип методов, где значение может отсутствовать:
-   - избегайте `get()` без проверки `isPresent()`;
-   - предпочитайте `orElse`, `orElseGet`, `orElseThrow`;
-   - применяйте `map` и `filter` для цепочек преобразований.
+12. Что такое взаимная блокировка (deadlock)? Как её избежать?
 
-4. **Композиция функций.** Используйте `andThen` и `compose` для построения конвейеров обработки:
-   - `andThen` — сначала текущая функция, затем переданная;
-   - `compose` — сначала переданная функция, затем текущая.
+13. Как измерить производительность многопоточного кода?
 
-5. **Комбинация предикатов.** Используйте `and`, `or`, `negate` для построения сложных условий:
-   - `and` — оба условия должны выполняться;
-   - `or` — хотя бы одно условие должно выполняться;
-   - `negate` — отрицание условия.
+14. Как отлаживать многопоточные приложения?
 
-6. **Эффективно финальные переменные.** Убедитесь, что все переменные, захватываемые лямбда-выражениями, являются эффективно финальными (не изменяются после инициализации).
+15. Что такое паттерн Producer-Consumer?
 
-7. **Тестирование.** Перед сдачей работы проверьте:
-   - корректность работы всех функциональных интерфейсов;
-   - правильность композиции функций и предикатов;
-   - обработку отсутствующих значений через `Optional`;
-   - работу методных ссылок.
+---
 
-8. **Применение ИИ.** При использовании средств ИИ:
-   - генерируйте по отдельности функциональные интерфейсы, конвейеры обработки и демонстрационный класс;
-   - обязательно проверяйте порядок операций в конвейерах;
-   - не делегируйте ИИ проектирование конвейеров без понимания порядка вычислений.
+## 7. Пример выполнения (Вариант 1)
 
-9. **Оформление отчёта.** Отчёт должен содержать:
-   - листинги всех файлов проекта с комментариями;
-   - протокол работы демонстрационного класса;
-   - обоснование выбора функциональных интерфейсов;
-   - ответы на контрольные вопросы;
-   - выводы по проделанной работе.
+### 7.1. Ожидаемый вывод
 
-## 7. Контрольные вопросы
+```
+=== Многопоточность: банковский счёт ===
 
-1. Что такое лямбда-выражение? Каков его синтаксис?
-2. Что такое функциональный интерфейс? Каковы требования к нему?
-3. Для чего предназначена аннотация `@FunctionalInterface`?
-4. Какие стандартные функциональные интерфейсы предоставляет пакет `java.util.function`?
-5. В чём различие между `Predicate`, `Function`, `Consumer` и `Supplier`?
-6. Что такое методная ссылка? Какие виды методных ссылок существуют?
-7. Что такое эффективно финальная переменная? Почему лямбда-выражения требуют именно таких переменных?
-8. Что такое паттерн `Optional`? Для каких целей он применяется?
-9. Какие методы предоставляет `Optional` для работы с возможными отсутствующими значениями?
-10. Почему не рекомендуется вызывать `get()` без предварительной проверки `isPresent()`?
-11. Что такое композиция функций? Чем `andThen` отличается от `compose`?
-12. Каким образом комбинируются предикаты? Для чего применяются методы `and`, `or`, `negate`?
-13. В каких случаях следует применять функциональный стиль, а в каких — императивный?
+=== Без синхронизации ===
+Thread-1 начал работу
+Thread-0 начал работу
+Thread-1 завершил работу. Операций: 1000, успешно: 984, ошибок: 16, время: 15 мс
+Thread-0 завершил работу. Операций: 1000, успешно: 982, ошибок: 18, время: 16 мс
+...
+Без синхронизации:
+  Итоговый баланс: 15423.50
+  Всего операций: 9850
+  Ошибок: 150
+  Время: 125 мс
+
+=== С synchronized ===
+pool-1-thread-1 начал работу
+pool-1-thread-0 начал работу
+...
+С synchronized:
+  Итоговый баланс: 15499.50
+  Всего операций: 10000
+  Ошибок: 0
+  Время: 289 мс
+
+=== С ReentrantLock ===
+pool-2-thread-1 начал работу
+pool-2-thread-0 начал работу
+...
+С ReentrantLock:
+  Итоговый баланс: 15499.50
+  Всего операций: 10000
+  Ошибок: 0
+  Время: 312 мс
+
+=== Сравнение ===
+Ожидаемый баланс: ~15500.00
+Без синхронизации: 15423.50 (отклонение: 76.50)
+С synchronized: 15499.50 (отклонение: 0.50)
+С ReentrantLock: 15499.50 (отклонение: 0.50)
+Время (synchronized): 289 мс
+Время (ReentrantLock): 312 мс
+```
+
+### 7.2. График сравнения производительности
+
+```
+Производительность (меньше — лучше):
+┌────────────────────────────────────────────────────────┐
+│ Без синхронизации    ████████████████ 125 мс          │
+│ С synchronized       ████████████████████████████ 289 мс │
+│ С ReentrantLock      █████████████████████████████ 312 мс │
+└────────────────────────────────────────────────────────┘
+
+Точность (отклонение меньше — лучше):
+┌────────────────────────────────────────────────────────┐
+│ Без синхронизации    ████████████████████████ 76.50   │
+│ С synchronized       ██ 0.50                          │
+│ С ReentrantLock      ██ 0.50                          │
+└────────────────────────────────────────────────────────┘
+```
+
+---
 
 ## 8. Рекомендуемые источники
 
-1. Блох Дж. *Java. Эффективное программирование.* — М.: Питер. — Правила 42–48 (лямбды и Stream API), правила 55–59 (Optional).
-2. Хорстманн К. *Java. Библиотека профессионала. Том 2.* — М.: Вильямс. — Глава 6 (Потоки данных).
-3. Тафти Н. *Java 8: Лямбда-выражения и Stream API.* — СПб.: БХВ-Петербург.
-4. Урма Р., Фуко М., Уорбертон А. *Java 8 в действии.* — М.: Вильямс. — Главы 2–3.
-5. Oracle Java Tutorials. Lesson: Lambda Expressions. URL: https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html
-6. Baeldung. Java 8 Optional. URL: https://www.baeldung.com/java-optional
-7. Baeldung. Java 8 Functional Interfaces. URL: https://www.baeldung.com/java-8-functional-interfaces
+1. **Шилдт Г.** *Java. Базовый курс.* — М.: Вильямс. — Глава 11 (Многопоточное программирование).
+
+2. **Хорстманн К., Корнелл Г.** *Java. Библиотека профессионала. Том 1.* — М.: Вильямс. — Глава 12 (Параллелизм).
+
+3. **Гоetz Б. и др.** *Java Concurrency in Practice.* — М.: Питер. — Полное руководство по параллелизму.
+
+4. **Oracle Java Tutorials: Concurrency.** — URL: https://docs.oracle.com/javase/tutorial/essential/concurrency/
+
+5. **Baeldung: Java Concurrency.** — URL: https://www.baeldung.com/java-concurrency
+
+6. **Блох Дж.** *Java. Эффективное программирование.* — М.: Питер. — Правила 78-86 (Параллелизм).
