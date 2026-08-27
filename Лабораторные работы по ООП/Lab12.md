@@ -1,1203 +1,1290 @@
-# Лабораторная работа №12. Интеграция с внешними API и LLM-сервисами
+# Лабораторная работа №12. JDBC: транзакции и пакетная обработка
 
 ## 1. Паспорт работы
 
 | Параметр | Значение |
 |----------|----------|
-| Тема | Интеграция с внешними API и LLM-сервисами |
-| Номер занятия в модуле | 4 из 4 (модуль 3) |
-| Продолжительность аудиторной части | 2 академических часа |
-| Предшествующая подготовка | Лабораторные работы №9–11 (функциональные интерфейсы, Stream API, JSON) |
-| Тип работы | Формирование навыков интеграции Java-приложений с внешними сервисами и большими языковыми моделями |
+| Номер занятия | 12 из 17 |
+| Блок | 5. Базы данных и JDBC |
+| Продолжительность | 2 академических часа |
+| Форма выполнения | Индивидуальная |
+| ИИ-инструмент | YandexGPT / GigaChat / JetBrains AI Assistant |
 
 ### 1.1. Цель работы
 
-Освоить механизмы взаимодействия Java-приложений с внешними сервисами посредством протокола HTTP: изучить стандартный HTTP-клиент `java.net.http.HttpClient`, принципы REST-архитектуры, основы работы с JSON API, а также приобрести практические навыки интеграции с программными интерфейсами больших языковых моделей (LLM). Научиться применять средства искусственного интеллекта как для создания интеллектуальных функций в приложениях, так и для рефакторинга собственного кода.
+Освоить управление транзакциями в JDBC, научиться выполнять пакетную обработку данных, использовать пул соединений для повышения производительности, реализовать UPSERT-операции для обеспечения идемпотентности.
 
 ### 1.2. Задачи работы
 
-1. Изучить основы протокола HTTP: методы запросов, коды ответов, заголовки.
-2. Освоить принципы REST-архитектуры и проектирования RESTful API.
-3. Научиться выполнять HTTP-запросы посредством стандартного клиента `java.net.http.HttpClient`.
-4. Освоить обработку JSON-ответов от внешних API с применением библиотеки Jackson.
-5. Изучить механизмы аутентификации (API-ключи, Bearer-токены).
-6. Освоить обработку ошибок HTTP и сетевых сбоев.
-7. Изучить принципы взаимодействия с программными интерфейсами больших языковых моделей.
-8. Освоить основы prompt-инженерии и её применение в Java-приложениях.
-9. Научиться применять библиотеку LangChain4j для интеграции с LLM.
-10. Освоить применение средств ИИ для рефакторинга и улучшения собственного кода.
+1. Изучить управление транзакциями в JDBC (setAutoCommit, commit, rollback).
+2. Освоить пакетную обработку (batch insert) для массовой вставки данных.
+3. Изучить использование пула соединений HikariCP.
+4. Реализовать UPSERT (INSERT ... ON CONFLICT DO UPDATE).
+5. Научиться замерять производительность различных подходов.
+6. Реализовать транзакционный метод для переназначения книг.
+7. Сравнить производительность с пулом и без пула соединений.
 
 ### 1.3. Оснащение
 
-- JDK версии 17 или выше;
-- интегрированная среда разработки IntelliJ IDEA Community Edition;
-- система сборки Maven или Gradle;
-- система контроля версий Git;
-- система модульного тестирования JUnit 5;
-- библиотека Jackson для работы с JSON;
-- библиотека LangChain4j (рекомендуется) или прямой HTTP-клиент;
-- доступ к LLM API (OpenAI, YandexGPT, OpenRouter, Ollama или аналогичному);
-- доступ к публичным REST API для демонстрационных целей.
+- JDK 17 или выше;
+- IntelliJ IDEA Community Edition;
+- Git;
+- PostgreSQL (локально или в Docker);
+- Maven или Gradle;
+- HikariCP;
+- доступ к YandexGPT или GigaChat.
 
-### 1.4. Особые условия выполнения работы
+---
 
-В связи с тем, что работа предполагает взаимодействие с внешними сервисами, необходимо учитывать следующие условия:
+## 2. Теоретический конспект
 
-1. **API-ключи.** Для работы с некоторыми LLM API требуется API-ключ. Преподаватель предоставляет учебные ключи или рекомендует бесплатные тарифы. API-ключи **не должны** фиксироваться в коде и коммититься в систему контроля версий — они передаются через переменные окружения или конфигурационные файлы, добавленные в `.gitignore`.
+### 2.1. Транзакции в JDBC
 
-2. **Локальные альтернативы.** При отсутствии доступа к интернету или платным API-сервисам допускается применение локальных моделей через Ollama или LM Studio.
+**Транзакция** — группа операций, которые выполняются как единое целое (ACID).
 
-3. **Конфиденциальность данных.** Запрещается передавать во внешние сервисы:
-   - персональные данные третьих лиц;
-   - конфиденциальную информацию учебного заведения;
-   - данные, нарушающие права интеллектуальной собственности;
-   - API-ключи и учётные данные.
+**ACID:**
+- **Atomicity** — атомарность (всё или ничего).
+- **Consistency** — согласованность.
+- **Isolation** — изоляция.
+- **Durability** — долговечность.
 
-4. **Mock-серверы.** Для тестирования без реальных запросов допускается применение mock-серверов (WireMock, MockServer) или заранее подготовленных JSON-файлов.
-
-## 2. Теоретические сведения
-
-### 2.1. Мотивация: зачем нужна интеграция с внешними сервисами
-
-Современные программные системы редко работают изолированно. Даже простое приложение может нуждаться в:
-
-- получении актуальных данных (погода, курсы валют, новости);
-- взаимодействии с платёжными системами;
-- отправке уведомлений (email, SMS, push);
-- использовании искусственного интеллекта для анализа текста, изображений, генерации контента;
-- интеграции с социальными сетями и мессенджерами.
-
-Всё это требует умения работать с внешними API посредством сетевого протокола HTTP.
-
-### 2.2. Основы протокола HTTP
-
-**HTTP** (HyperText Transfer Protocol) — протокол прикладного уровня для передачи данных в сети. Основан на модели «клиент-сервер»: клиент отправляет запрос, сервер возвращает ответ.
-
-#### 2.2.1. HTTP-запрос
-
-Запрос состоит из:
-- **строки запроса** с методом, URL и версией протокола;
-- **заголовков** (headers) — метаданных запроса;
-- **тела** (body) — опциональных данных.
-
-**Основные методы HTTP:**
-
-| Метод | Назначение | Идемпотентность | Тело |
-|-------|------------|:---------------:|:----:|
-| `GET` | Получение ресурса | Да | Нет |
-| `POST` | Создание ресурса | Нет | Да |
-| `PUT` | Полное обновление ресурса | Да | Да |
-| `PATCH` | Частичное обновление ресурса | Нет | Да |
-| `DELETE` | Удаление ресурса | Да | Нет |
-
-**Пример запроса:**
-
-```http
-POST /api/users HTTP/1.1
-Host: api.example.com
-Content-Type: application/json
-Authorization: Bearer token123
-Content-Length: 52
-
-{"name": "Иванов И.И.", "email": "ivanov@example.com"}
-```
-
-#### 2.2.2. HTTP-ответ
-
-Ответ состоит из:
-- **строки состояния** с версией протокола, кодом и текстовым описанием;
-- **заголовков**;
-- **тела** — возвращаемых данных.
-
-**Основные коды состояния:**
-
-| Код | Категория | Описание |
-|-----|-----------|----------|
-| `200 OK` | 2xx Успех | Запрос выполнен успешно |
-| `201 Created` | 2xx Успех | Ресурс создан |
-| `204 No Content` | 2xx Успех | Успех без тела ответа |
-| `400 Bad Request` | 4xx Ошибка клиента | Некорректный запрос |
-| `401 Unauthorized` | 4xx Ошибка клиента | Требуется аутентификация |
-| `403 Forbidden` | 4xx Ошибка клиента | Доступ запрещён |
-| `404 Not Found` | 4xx Ошибка клиента | Ресурс не найден |
-| `429 Too Many Requests` | 4xx Ошибка клиента | Превышен лимит запросов |
-| `500 Internal Server Error` | 5xx Ошибка сервера | Внутренняя ошибка сервера |
-| `503 Service Unavailable` | 5xx Ошибка сервера | Сервис временно недоступен |
-
-### 2.3. REST-архитектура
-
-**REST** (Representational State Transfer) — архитектурный стиль взаимодействия компонентов распределённых приложений. RESTful API соответствует следующим принципам:
-
-1. **Клиент-сервер.** Разделение ответственности между клиентом и сервером.
-2. **Отсутствие состояния (stateless).** Каждый запрос содержит всю необходимую информацию.
-3. **Кэшируемость.** Ответы могут быть кэшируемы.
-4. **Единообразие интерфейса.** Унифицированный способ взаимодействия с ресурсами.
-5. **Слоистая система.** Клиент не знает, взаимодействует ли он с конечным сервером или промежуточным узлом.
-
-**Проектирование RESTful API:**
-
-| Операция | HTTP-метод | URL | Тело запроса |
-|----------|------------|-----|--------------|
-| Получить список | `GET` | `/api/users` | — |
-| Получить один | `GET` | `/api/users/123` | — |
-| Создать | `POST` | `/api/users` | JSON с данными |
-| Обновить | `PUT` | `/api/users/123` | JSON с данными |
-| Частично обновить | `PATCH` | `/api/users/123` | JSON с изменениями |
-| Удалить | `DELETE` | `/api/users/123` | — |
-
-### 2.4. HTTP-клиент в Java (`java.net.http.HttpClient`)
-
-Начиная с Java 11, в стандартную библиотеку входит класс `HttpClient`, предоставляющий современный API для выполнения HTTP-запросов.
-
-#### 2.4.1. Базовое использование
+**Управление транзакциями в JDBC:**
 
 ```java
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+// По умолчанию autoCommit = true
+Connection conn = DriverManager.getConnection(url, user, password);
 
-// Создание клиента
-HttpClient client = HttpClient.newHttpClient();
+// Отключение autoCommit (начало транзакции)
+conn.setAutoCommit(false);
 
-// Создание GET-запроса
-HttpRequest request = HttpRequest.newBuilder()
-    .uri(URI.create("https://api.example.com/users"))
-    .header("Accept", "application/json")
-    .GET()
-    .build();
-
-// Выполнение запроса
-HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-// Обработка ответа
-int statusCode = response.statusCode();
-String body = response.body();
-System.out.println("Статус: " + statusCode);
-System.out.println("Тело: " + body);
-```
-
-#### 2.4.2. POST-запрос с JSON-телом
-
-```java
-String jsonBody = """
-    {
-        "name": "Иванов И.И.",
-        "email": "ivanov@example.com"
-    }
-    """;
-
-HttpRequest request = HttpRequest.newBuilder()
-    .uri(URI.create("https://api.example.com/users"))
-    .header("Content-Type", "application/json")
-    .header("Authorization", "Bearer " + apiKey)
-    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-    .build();
-
-HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-```
-
-#### 2.4.3. Асинхронные запросы
-
-```java
-// Асинхронное выполнение
-client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-    .thenApply(HttpResponse::body)
-    .thenAccept(body -> System.out.println("Получено: " + body))
-    .exceptionally(ex -> {
-        System.err.println("Ошибка: " + ex.getMessage());
-        return null;
-    });
-```
-
-#### 2.4.4. Конфигурация клиента
-
-```java
-HttpClient client = HttpClient.newBuilder()
-    .version(HttpClient.Version.HTTP_2)                    // HTTP/2
-    .connectTimeout(Duration.ofSeconds(10))                // таймаут соединения
-    .followRedirects(HttpClient.Redirect.NORMAL)           // автоматические редиректы
-    .authenticator(new Authenticator() {                   // аутентификация
-        @Override
-        protected PasswordAuthentication getRequestAuthentication(...) {
-            return new PasswordAuthentication("user", "pass".toCharArray());
-        }
-    })
-    .build();
-```
-
-### 2.5. Обработка ошибок и таймаутов
-
-При работе с внешними API необходимо обрабатывать различные типы ошибок:
-
-```java
 try {
-    HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+    // Выполнение операций
+    stmt.executeUpdate("UPDATE accounts SET balance = balance - 100 WHERE id = 1");
+    stmt.executeUpdate("UPDATE accounts SET balance = balance + 100 WHERE id = 2");
+    
+    // Фиксация транзакции
+    conn.commit();
+    System.out.println("Транзакция успешно выполнена");
+} catch (SQLException e) {
+    // Откат при ошибке
+    conn.rollback();
+    System.err.println("Транзакция откачена: " + e.getMessage());
+} finally {
+    // Восстановление autoCommit
+    conn.setAutoCommit(true);
+}
+```
 
-    int statusCode = response.statusCode();
-    if (statusCode >= 200 && statusCode < 300) {
-        // Успешный ответ
-        processResponse(response.body());
-    } else if (statusCode == 401) {
-        throw new AuthenticationException("Неверный API-ключ");
-    } else if (statusCode == 404) {
-        throw new ResourceNotFoundException("Ресурс не найден");
-    } else if (statusCode == 429) {
-        throw new RateLimitExceededException("Превышен лимит запросов");
-    } else if (statusCode >= 500) {
-        throw new ServerException("Ошибка сервера: " + statusCode);
-    } else {
-        throw new ApiException("Неожиданный статус: " + statusCode);
+### 2.2. Точки сохранения (Savepoints)
+
+```java
+conn.setAutoCommit(false);
+
+try {
+    stmt.executeUpdate("INSERT INTO books (title) VALUES ('Book 1')");
+    
+    // Установка точки сохранения
+    Savepoint sp = conn.setSavepoint("before_book2");
+    
+    stmt.executeUpdate("INSERT INTO books (title) VALUES ('Book 2')");
+    // Если ошибка, откат к точке сохранения
+    conn.rollback(sp);
+    System.out.println("Откат к точке сохранения");
+    
+    conn.commit();
+} catch (SQLException e) {
+    conn.rollback();
+}
+```
+
+### 2.3. Пакетная обработка (Batch)
+
+**Преимущества:**
+- Меньше сетевых вызовов.
+- Выше производительность при массовых вставках.
+- Транзакционная целостность.
+
+```java
+String sql = "INSERT INTO books (title, author, year, isbn, publisher) VALUES (?, ?, ?, ?, ?)";
+
+try (Connection conn = getConnection();
+     PreparedStatement pstmt = conn.prepareStatement(sql)) {
+    
+    conn.setAutoCommit(false);
+    
+    for (Book book : books) {
+        pstmt.setString(1, book.getTitle());
+        pstmt.setString(2, book.getAuthor());
+        pstmt.setInt(3, book.getYear());
+        pstmt.setString(4, book.getIsbn());
+        pstmt.setString(5, book.getPublisher());
+        pstmt.addBatch();
     }
-} catch (HttpTimeoutException e) {
-    throw new ApiException("Превышен таймаут запроса", e);
-} catch (InterruptedException e) {
-    Thread.currentThread().interrupt();
-    throw new ApiException("Запрос прерван", e);
-} catch (IOException e) {
-    throw new ApiException("Сетевая ошибка", e);
+    
+    int[] results = pstmt.executeBatch();
+    conn.commit();
+    
+    System.out.println("Вставлено: " + results.length + " записей");
 }
 ```
 
-### 2.6. Интеграция с LLM API
+### 2.4. UPSERT (INSERT ON CONFLICT)
 
-**Большие языковые модели (LLM)** — нейросетевые модели, обученные на больших объёмах текстовых данных и способные генерировать и анализировать текст на естественном языке. Примеры: GPT-4 (OpenAI), YandexGPT (Яндекс), Claude (Anthropic), Qwen (Alibaba).
+**UPSERT** — операция, которая вставляет запись, если она не существует, или обновляет, если существует.
 
-#### 2.6.1. Общая схема взаимодействия
+**PostgreSQL синтаксис:**
+```sql
+INSERT INTO books (title, author, year, isbn, publisher)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (isbn) DO UPDATE SET
+    title = EXCLUDED.title,
+    author = EXCLUDED.author,
+    year = EXCLUDED.year,
+    publisher = EXCLUDED.publisher
+```
 
-Взаимодействие с LLM API обычно состоит из следующих шагов:
+**В Java:**
+```java
+String sql = """
+    INSERT INTO books (title, author, year, isbn, publisher)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (isbn) DO UPDATE SET
+        title = EXCLUDED.title,
+        author = EXCLUDED.author,
+        year = EXCLUDED.year,
+        publisher = EXCLUDED.publisher
+""";
 
-1. Формирование **промпта** (prompt) — текстового запроса к модели.
-2. Отправка HTTP-запроса к API с промптом и параметрами (температура, максимальная длина и т. п.).
-3. Получение JSON-ответа с сгенерированным текстом.
-4. Разбор ответа и извлечение результата.
-
-#### 2.6.2. Пример запроса к OpenAI API
-
-```http
-POST https://api.openai.com/v1/chat/completions
-Authorization: Bearer sk-...
-Content-Type: application/json
-
-{
-  "model": "gpt-4o-mini",
-  "messages": [
-    {"role": "system", "content": "Ты — помощник в решении задач по программированию."},
-    {"role": "user", "content": "Объясни, что такое полиморфизм в Java."}
-  ],
-  "temperature": 0.7,
-  "max_tokens": 500
+try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+    pstmt.setString(1, book.getTitle());
+    pstmt.setString(2, book.getAuthor());
+    pstmt.setInt(3, book.getYear());
+    pstmt.setString(4, book.getIsbn());
+    pstmt.setString(5, book.getPublisher());
+    pstmt.executeUpdate();
 }
 ```
 
-Ответ:
+### 2.5. Пул соединений HikariCP
 
-```json
-{
-  "id": "chatcmpl-...",
-  "choices": [{
-    "message": {
-      "role": "assistant",
-      "content": "Полиморфизм в Java — это..."
-    },
-    "finish_reason": "stop"
-  }],
-  "usage": {
-    "prompt_tokens": 20,
-    "completion_tokens": 150,
-    "total_tokens": 170
-  }
-}
-```
+**HikariCP** — высокопроизводительная библиотека для пула соединений.
 
-#### 2.6.3. Роли сообщений
+**Преимущества:**
+- Переиспользование соединений (уменьшение накладных расходов).
+- Ограничение количества соединений.
+- Управление временем жизни соединений.
 
-В диалоговых моделях различают три роли сообщений:
-
-- **`system`** — системная инструкция, задающая поведение модели;
-- **`user`** — сообщение пользователя;
-- **`assistant`** — ответ модели (используется для сохранения контекста диалога).
-
-#### 2.6.4. Параметры генерации
-
-- **`temperature`** (0.0–2.0) — степень случайности. Низкие значения — более детерминированные ответы, высокие — более креативные.
-- **`max_tokens`** — максимальная длина ответа в токенах.
-- **`top_p`** — альтернатива temperature, ядерная выборка.
-
-### 2.7. Локальные модели: Ollama
-
-**Ollama** — инструмент для запуска LLM локально. Поддерживает модели LLaMA, Mistral, Qwen, Gemma и другие.
-
-**Установка и запуск:**
-
-```bash
-# Установка (Linux/macOS)
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Запуск модели
-ollama run llama3.2
-ollama run qwen2.5:7b
-```
-
-**API Ollama** совместимо с OpenAI API и доступно по адресу `http://localhost:11434/v1/chat/completions`.
-
-### 2.8. Библиотека LangChain4j
-
-**LangChain4j** — Java-библиотека, упрощающая интеграцию с LLM. Предоставляет единый интерфейс для работы с различными провайдерами (OpenAI, Ollama, Azure, YandexGPT и др.).
-
-**Подключение:**
-
+**Подключение зависимости:**
 ```xml
 <dependency>
-    <groupId>dev.langchain4j</groupId>
-    <artifactId>langchain4j</artifactId>
-    <version>0.35.0</version>
-</dependency>
-<dependency>
-    <groupId>dev.langchain4j</groupId>
-    <artifactId>langchain4j-open-ai</artifactId>
-    <version>0.35.0</version>
+    <groupId>com.zaxxer</groupId>
+    <artifactId>HikariCP</artifactId>
+    <version>5.0.1</version>
 </dependency>
 ```
 
-**Пример использования:**
-
+**Настройка HikariCP:**
 ```java
-import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
-// Создание модели
-ChatLanguageModel model = OpenAiChatModel.builder()
-    .apiKey(System.getenv("OPENAI_API_KEY"))
-    .modelName("gpt-4o-mini")
-    .temperature(0.7)
-    .build();
-
-// Простой запрос
-String answer = model.generate("Объясни, что такое полиморфизм в Java.");
-System.out.println(answer);
-```
-
-**Использование системных промптов и AI Services:**
-
-```java
-// Определение интерфейса AI-сервиса
-interface Tutor {
-    @SystemMessage("Ты — репетитор по программированию. Отвечай кратко и по существу.")
-    String explain(@UserMessage String topic);
-
-    @SystemMessage("Ты — репетитор. Проверяй код и указывай на ошибки.")
-    String reviewCode(@UserMessage String code);
-}
-
-// Создание прокси
-Tutor tutor = AiServices.create(Tutor.class, model);
-
-// Использование
-String explanation = tutor.explain("наследование в Java");
-String review = tutor.reviewCode("public class Test { public static void main(...) }");
-```
-
-### 2.9. Основы prompt-инженерии
-
-**Prompt-инженерия** — искусство формулирования запросов к LLM для получения качественных и предсказуемых результатов.
-
-#### 2.9.1. Принципы эффективных промптов
-
-1. **Конкретность.** Чётко формулируйте задачу:
-   ```
-   Плохо: "Расскажи про Java."
-   Хорошо: "Объясни различие между перегрузкой и переопределением методов в Java. Приведи по одному примеру для каждого случая."
-   ```
-
-2. **Роль.** Задавайте модели роль:
-   ```
-   "Ты — опытный Java-разработчик с 10-летним стажем. Проанализируй следующий код и укажи на нарушения принципов SOLID."
-   ```
-
-3. **Формат ответа.** Указывайте желаемый формат:
-   ```
-   "Верни ответ в формате JSON со следующими полями: error_type, line_number, description, fix."
-   ```
-
-4. **Контекст.** Предоставляйте необходимый контекст:
-   ```
-   "Рассмотрим класс Student с полями name, age, group. Напиши метод equals() и hashCode(), соблюдая контракт."
-   ```
-
-5. **Примеры (few-shot).** Приводите примеры желаемого поведения:
-   ```
-   "Преобразуй текст в список ключевых слов.
-   Пример 1: 'Java — это объектно-ориентированный язык' → ['Java', 'объектно-ориентированный', 'язык']
-   Пример 2: '...' → [...]
-   Текст: '...'"
-   ```
-
-#### 2.9.2. Структурированные ответы
-
-Для получения структурированных данных от LLM применяется указание формата:
-
-```java
-String prompt = """
-    Проанализий следующий код и верни ответ в формате JSON:
-    {
-        "issues": [
-            {"severity": "ERROR|WARNING|INFO", "line": N, "message": "...", "suggestion": "..."}
-        ],
-        "overall_quality": "GOOD|ACCEPTABLE|POOR",
-        "summary": "..."
+public class DataSourceProvider {
+    private static HikariDataSource dataSource;
+    
+    public static synchronized HikariDataSource getDataSource() {
+        if (dataSource == null) {
+            HikariConfig config = new HikariConfig();
+            config.setJdbcUrl("jdbc:postgresql://localhost:5432/postgres");
+            config.setUsername("postgres");
+            config.setPassword("pass");
+            config.setDriverClassName("org.postgresql.Driver");
+            
+            // Настройки пула
+            config.setMaximumPoolSize(10);
+            config.setMinimumIdle(5);
+            config.setConnectionTimeout(30000);
+            config.setIdleTimeout(600000);
+            config.setMaxLifetime(1800000);
+            
+            dataSource = new HikariDataSource(config);
+        }
+        return dataSource;
     }
-
-    Код:
-    %s
-    """.formatted(code);
-```
-
-Полученный JSON затем десериализуется с помощью Jackson.
-
-### 2.10. ИИ как инструмент рефакторинга
-
-Средства ИИ могут применяться не только для создания интеллектуальных функций, но и для улучшения собственного кода:
-
-**Типичные задачи рефакторинга с помощью ИИ:**
-
-1. **Улучшение читаемости.** «Улучши читаемость следующего кода, сохранив его функциональность».
-2. **Применение паттернов.** «Примени паттерн Builder для класса с большим количеством параметров».
-3. **Переход к функциональному стилю.** «Перепиши следующий императивный код с использованием Stream API».
-4. **Извлечение методов.** «Разбей длинный метод на несколько небольших с понятными именами».
-5. **Улучшение обработки ошибок.** «Добавь корректную обработку исключений в следующий код».
-6. **Оптимизация.** «Предложи более эффективную реализацию следующего алгоритма».
-
-**Пример промпта для рефакторинга:**
-
-```
-Ты — опытный Java-разработчик, специализирующийся на рефакторинге.
-Проанализируй следующий код и предложи улучшения с точки зрения:
-1. Принципов SOLID
-2. Чистого кода (Clean Code)
-3. Производительности
-4. Обработки ошибок
-
-Верни ответ в формате JSON:
-{
-    "issues": [...],
-    "refactored_code": "...",
-    "explanation": "..."
+    
+    public static Connection getConnection() throws SQLException {
+        return getDataSource().getConnection();
+    }
 }
-
-Код:
-[вставить код]
 ```
 
-### 2.11. Безопасность API-ключей
-
-API-ключи — конфиденциальные данные, требующие защиты:
-
-1. **Никогда не фиксируйте ключи в коде.** Используйте переменные окружения:
-   ```java
-   String apiKey = System.getenv("OPENAI_API_KEY");
-   if (apiKey == null || apiKey.isBlank()) {
-       throw new IllegalStateException("API-ключ не установлен");
-   }
-   ```
-
-2. **Добавляйте файлы с ключами в `.gitignore`:**
-   ```
-   .env
-   application-secrets.properties
-   ```
-
-3. **Ограничивайте права ключей.** В настройках API-провайдера устанавливайте минимально необходимые права.
-
-4. **Регулярно ротируйте ключи.** Периодически меняйте API-ключи.
-
-5. **Используйте разные ключи для разных сред.** Отдельные ключи для разработки, тестирования и продакшена.
-
-## 3. Примеры выполнения
-
-### 3.1. Пример 1. Клиент для публичного REST API (Open-Meteo)
-
-Рассмотрим интеграцию с бесплатным погодным API Open-Meteo, не требующим API-ключа:
+### 2.6. Сравнение производительности
 
 ```java
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+public void comparePerformance() {
+    // Без пула соединений
+    long startNoPool = System.currentTimeMillis();
+    for (int i = 0; i < 100; i++) {
+        try (Connection conn = DriverManager.getConnection(url, user, pass)) {
+            // запрос
+        }
+    }
+    long timeNoPool = System.currentTimeMillis() - startNoPool;
+    
+    // С пулом соединений
+    long startPool = System.currentTimeMillis();
+    for (int i = 0; i < 100; i++) {
+        try (Connection conn = DataSourceProvider.getConnection()) {
+            // запрос
+        }
+    }
+    long timePool = System.currentTimeMillis() - startPool;
+    
+    System.out.printf("Без пула: %d мс%n", timeNoPool);
+    System.out.printf("С пулом: %d мс%n", timePool);
+    System.out.printf("Ускорение: %.2fx%n", (double) timeNoPool / timePool);
+}
+```
+
+### 2.7. Транзакции и конкурентность
+
+```java
+// Транзакционный метод с проверкой конфликтов
+public void transferBooks(long fromAuthorId, long toAuthorId) throws SQLException {
+    String checkIsbnSql = "SELECT isbn FROM books WHERE author_id = ? AND isbn IN (SELECT isbn FROM books WHERE author_id = ?)";
+    String updateSql = "UPDATE books SET author_id = ? WHERE author_id = ?";
+    
+    try (Connection conn = DataSourceProvider.getConnection()) {
+        conn.setAutoCommit(false);
+        conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        
+        // Проверка на конфликт
+        try (PreparedStatement checkStmt = conn.prepareStatement(checkIsbnSql)) {
+            checkStmt.setLong(1, fromAuthorId);
+            checkStmt.setLong(2, toAuthorId);
+            try (ResultSet rs = checkStmt.executeQuery()) {
+                if (rs.next()) {
+                    throw new SQLException("Конфликт ISBN: книга с таким ISBN уже существует у целевого автора");
+                }
+            }
+        }
+        
+        // Обновление
+        try (PreparedStatement updateStmt = conn.prepareStatement(updateSql)) {
+            updateStmt.setLong(1, toAuthorId);
+            updateStmt.setLong(2, fromAuthorId);
+            int count = updateStmt.executeUpdate();
+            System.out.println("Переназначено книг: " + count);
+        }
+        
+        conn.commit();
+        System.out.println("Транзакция успешно выполнена");
+    } catch (SQLException e) {
+        // rollback выполняется автоматически, если не вызван commit
+        throw e;
+    }
+}
+```
+
+---
+
+## 3. Задание на паре
+
+### Задача. Транзакции и пакетная обработка в JDBC
+
+1. **Реализовать метод `transferBooks(long fromAuthorId, long toAuthorId)`:**
+   - Все книги одного автора переназначить другому.
+   - Вся операция — в одной транзакции.
+   - Если у целевого автора уже есть книга с таким же ISBN — откатывать транзакцию.
+
+2. **Реализовать метод `batchInsert(List<Book> books)`:**
+   - Вставка 10 000 записей в одной транзакции.
+   - Использовать `PreparedStatement.addBatch()` и `executeBatch()`.
+   - Замерить время пакетной вставки vs построчной вставки.
+
+3. **Реализовать метод `saveOrUpdate(Book book)`:**
+   - Если книга с таким ISBN уже существует — обновить её.
+   - Иначе — вставить (UPSERT).
+   - Использовать SQL `ON CONFLICT`.
+
+4. **Настроить HikariCP как пул соединений:**
+   - Сравнить время 100 последовательных запросов с пулом и без пула.
+   - Проанализировать результаты.
+
+5. **Протестировать все операции в main():**
+   - Создать тестовые данные.
+   - Выполнить все методы.
+   - Вывести результаты.
+
+**Пример выполнения:**
+```
+=== Переназначение книг ===
+Автор 1: 15 книг
+Автор 2: 10 книг
+Переназначено книг: 15
+Транзакция выполнена успешно
+
+=== Пакетная вставка ===
+Построчная вставка: 10000 записей за 5234 мс
+Пакетная вставка: 10000 записей за 245 мс
+Ускорение: 21.36x
+
+=== UPSERT ===
+Книга с ISBN '978-5-17-118456-0' обновлена
+Книга с ISBN '978-5-17-118457-7' вставлена
+
+=== Сравнение производительности (100 запросов) ===
+Без пула: 1856 мс
+С пулом (HikariCP): 156 мс
+Ускорение: 11.90x
+```
+
+### Применение ИИ-инструмента
+
+**Промпт для YandexGPT:**
+```
+Сгенерируй SQL-запрос INSERT ... ON CONFLICT DO UPDATE для таблицы books в PostgreSQL.
+
+Таблица:
+CREATE TABLE books (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    author VARCHAR(255) NOT NULL,
+    year INTEGER NOT NULL,
+    isbn VARCHAR(20) UNIQUE NOT NULL,
+    publisher VARCHAR(255)
+);
+
+Требования:
+1. Конфликт по полю isbn.
+2. При конфликте обновлять все поля кроме id.
+3. Возвращать id вставленной/обновлённой записи.
+4. Использовать синтаксис PostgreSQL.
+```
+
+**Анализ результата:**
+- Проверить корректность синтаксиса ON CONFLICT.
+- Проверить использование EXCLUDED.
+- Проверить возврат id через RETURNING.
+- Проверить соответствие полей.
+
+---
+
+## 4. Индивидуальные задания (30 вариантов)
+
+Каждый вариант содержит:
+- Два метода с транзакциями.
+- Особые условия для конфликтов.
+- Особую структуру таблицы.
+
+---
+
+### Вариант 1. Книги (Book)
+
+**Таблица:** `books` (id, title, author, year, isbn, publisher)
+
+**Метод 1:** `transferBooks(long fromAuthorId, long toAuthorId)` — конфликт по isbn
+
+**Метод 2:** `batchInsert(List<Book> books)` — вставка 10000 записей
+
+**UPSERT:** по isbn, обновлять все поля
+
+---
+
+### Вариант 2. Сотрудники (Employee)
+
+**Таблица:** `employees` (id, first_name, last_name, position, salary, department, email)
+
+**Метод 1:** `transferEmployees(long fromDeptId, long toDeptId)` — конфликт по email
+
+**Метод 2:** `batchInsert(List<Employee> employees)` — вставка 5000 записей
+
+**UPSERT:** по email, обновлять все поля
+
+---
+
+### Вариант 3. Товары (Product)
+
+**Таблица:** `products` (id, name, category, price, quantity, supplier, sku)
+
+**Метод 1:** `mergeProducts(long fromSupplierId, long toSupplierId)` — конфликт по sku
+
+**Метод 2:** `batchInsert(List<Product> products)` — вставка 15000 записей
+
+**UPSERT:** по sku, обновлять все поля
+
+---
+
+### Вариант 4. Заказы (Order)
+
+**Таблица:** `orders` (id, customer_name, total_amount, status, created_at, order_number)
+
+**Метод 1:** `mergeOrders(long fromCustomerId, long toCustomerId)` — конфликт по order_number
+
+**Метод 2:** `batchInsert(List<Order> orders)` — вставка 8000 записей
+
+**UPSERT:** по order_number, обновлять все поля
+
+---
+
+### Вариант 5. Пользователи (User)
+
+**Таблица:** `users` (id, username, email, password_hash, role, is_active)
+
+**Метод 1:** `mergeUsers(long fromRoleId, long toRoleId)` — конфликт по email
+
+**Метод 2:** `batchInsert(List<User> users)` — вставка 7000 записей
+
+**UPSERT:** по email, обновлять все поля
+
+---
+
+### Вариант 6. Автомобили (Car)
+
+**Таблица:** `cars` (id, brand, model, year, price, vin, color)
+
+**Метод 1:** `transferCars(long fromBrandId, long toBrandId)` — конфликт по vin
+
+**Метод 2:** `batchInsert(List<Car> cars)` — вставка 12000 записей
+
+**UPSERT:** по vin, обновлять все поля
+
+---
+
+### Вариант 7. Студенты (Student)
+
+**Таблица:** `students` (id, first_name, last_name, group_name, gpa, student_id, birth_date)
+
+**Метод 1:** `transferStudents(long fromGroupId, long toGroupId)` — конфликт по student_id
+
+**Метод 2:** `batchInsert(List<Student> students)` — вставка 10000 записей
+
+**UPSERT:** по student_id, обновлять все поля
+
+---
+
+### Вариант 8. Счета (Account)
+
+**Таблица:** `accounts` (id, account_number, owner_name, balance, currency, opened_date)
+
+**Метод 1:** `transferAccounts(long fromOwnerId, long toOwnerId)` — конфликт по account_number
+
+**Метод 2:** `batchInsert(List<Account> accounts)` — вставка 6000 записей
+
+**UPSERT:** по account_number, обновлять все поля
+
+---
+
+### Вариант 9. Фильмы (Movie)
+
+**Таблица:** `movies` (id, title, director, year, rating, genre, imdb_id)
+
+**Метод 1:** `transferMovies(long fromGenreId, long toGenreId)` — конфликт по imdb_id
+
+**Метод 2:** `batchInsert(List<Movie> movies)` — вставка 9000 записей
+
+**UPSERT:** по imdb_id, обновлять все поля
+
+---
+
+### Вариант 10. Рестораны (Restaurant)
+
+**Таблица:** `restaurants` (id, name, address, phone, rating, cuisine, tax_id)
+
+**Метод 1:** `transferRestaurants(long fromCuisineId, long toCuisineId)` — конфликт по tax_id
+
+**Метод 2:** `batchInsert(List<Restaurant> restaurants)` — вставка 5000 записей
+
+**UPSERT:** по tax_id, обновлять все поля
+
+---
+
+### Вариант 11. Транзакции (Transaction)
+
+**Таблица:** `transactions` (id, amount, type, date, description, category, tx_id)
+
+**Метод 1:** `mergeTransactions(long fromCategoryId, long toCategoryId)` — конфликт по tx_id
+
+**Метод 2:** `batchInsert(List<Transaction> transactions)` — вставка 20000 записей
+
+**UPSERT:** по tx_id, обновлять все поля
+
+---
+
+### Вариант 12. Клиенты (Customer)
+
+**Таблица:** `customers` (id, first_name, last_name, email, phone, city, customer_code)
+
+**Метод 1:** `transferCustomers(long fromCityId, long toCityId)` — конфликт по customer_code
+
+**Метод 2:** `batchInsert(List<Customer> customers)` — вставка 8000 записей
+
+**UPSERT:** по customer_code, обновлять все поля
+
+---
+
+### Вариант 13. Договоры (Contract)
+
+**Таблица:** `contracts` (id, number, client_name, sign_date, amount, status, contract_number)
+
+**Метод 1:** `mergeContracts(long fromStatusId, long toStatusId)` — конфликт по contract_number
+
+**Метод 2:** `batchInsert(List<Contract> contracts)` — вставка 7000 записей
+
+**UPSERT:** по contract_number, обновлять все поля
+
+---
+
+### Вариант 14. Отели (Hotel)
+
+**Таблица:** `hotels` (id, name, city, stars, rooms_count, rating, hotel_code)
+
+**Метод 1:** `transferHotels(long fromCityId, long toCityId)` — конфликт по hotel_code
+
+**Метод 2:** `batchInsert(List<Hotel> hotels)` — вставка 6000 записей
+
+**UPSERT:** по hotel_code, обновлять все поля
+
+---
+
+### Вариант 15. Спортсмены (Athlete)
+
+**Таблица:** `athletes` (id, first_name, last_name, sport, age, medals, athlete_id)
+
+**Метод 1:** `transferAthletes(long fromSportId, long toSportId)` — конфликт по athlete_id
+
+**Метод 2:** `batchInsert(List<Athlete> athletes)` — вставка 5000 записей
+
+**UPSERT:** по athlete_id, обновлять все поля
+
+---
+
+### Вариант 16. Статьи (Article)
+
+**Таблица:** `articles` (id, title, content, author, published_date, views, doi)
+
+**Метод 1:** `mergeArticles(long fromAuthorId, long toAuthorId)` — конфликт по doi
+
+**Метод 2:** `batchInsert(List<Article> articles)` — вставка 8000 записей
+
+**UPSERT:** по doi, обновлять все поля
+
+---
+
+### Вариант 17. Билеты (Ticket)
+
+**Таблица:** `tickets` (id, event_name, venue, date, price, quantity, ticket_code)
+
+**Метод 1:** `transferTickets(long fromVenueId, long toVenueId)` — конфликт по ticket_code
+
+**Метод 2:** `batchInsert(List<Ticket> tickets)` — вставка 12000 записей
+
+**UPSERT:** по ticket_code, обновлять все поля
+
+---
+
+### Вариант 18. Курсы (Course)
+
+**Таблица:** `courses` (id, title, instructor, duration, price, start_date, course_code)
+
+**Метод 1:** `mergeCourses(long fromInstructorId, long toInstructorId)` — конфликт по course_code
+
+**Метод 2:** `batchInsert(List<Course> courses)` — вставка 6000 записей
+
+**UPSERT:** по course_code, обновлять все поля
+
+---
+
+### Вариант 19. Инвентарь (Item)
+
+**Таблица:** `inventory` (id, name, category, quantity, location, status, serial_number)
+
+**Метод 1:** `transferItems(long fromCategoryId, long toCategoryId)` — конфликт по serial_number
+
+**Метод 2:** `batchInsert(List<Item> items)` — вставка 10000 записей
+
+**UPSERT:** по serial_number, обновлять все поля
+
+---
+
+### Вариант 20. Заявки (Request)
+
+**Таблица:** `requests` (id, client_name, description, priority, status, created_at, request_number)
+
+**Метод 1:** `mergeRequests(long fromStatusId, long toStatusId)` — конфликт по request_number
+
+**Метод 2:** `batchInsert(List<Request> requests)` — вставка 7000 записей
+
+**UPSERT:** по request_number, обновлять все поля
+
+---
+
+### Вариант 21. Платежи (Payment)
+
+**Таблица:** `payments` (id, number, payer, recipient, amount, date, payment_id)
+
+**Метод 1:** `transferPayments(long fromPayerId, long toPayerId)` — конфликт по payment_id
+
+**Метод 2:** `batchInsert(List<Payment> payments)` — вставка 15000 записей
+
+**UPSERT:** по payment_id, обновлять все поля
+
+---
+
+### Вариант 22. Публикации (Publication)
+
+**Таблица:** `publications` (id, title, author, journal, year, doi, pub_id)
+
+**Метод 1:** `mergePublications(long fromJournalId, long toJournalId)` — конфликт по doi
+
+**Метод 2:** `batchInsert(List<Publication> publications)` — вставка 5000 записей
+
+**UPSERT:** по doi, обновлять все поля
+
+---
+
+### Вариант 23. Ноутбуки (Laptop)
+
+**Таблица:** `laptops` (id, brand, model, processor, ram, price, serial)
+
+**Метод 1:** `transferLaptops(long fromBrandId, long toBrandId)` — конфликт по serial
+
+**Метод 2:** `batchInsert(List<Laptop> laptops)` — вставка 8000 записей
+
+**UPSERT:** по serial, обновлять все поля
+
+---
+
+### Вариант 24. Врачи (Doctor)
+
+**Таблица:** `doctors` (id, first_name, last_name, specialization, experience, rating, license)
+
+**Метод 1:** `mergeDoctors(long fromSpecializationId, long toSpecializationId)` — конфликт по license
+
+**Метод 2:** `batchInsert(List<Doctor> doctors)` — вставка 6000 записей
+
+**UPSERT:** по license, обновлять все поля
+
+---
+
+### Вариант 25. Сертификаты (Certificate)
+
+**Таблица:** `certificates` (id, number, holder_name, issued_date, expiry_date, cert_id)
+
+**Метод 1:** `transferCertificates(long fromHolderId, long toHolderId)` — конфликт по cert_id
+
+**Метод 2:** `batchInsert(List<Certificate> certificates)` — вставка 7000 записей
+
+**UPSERT:** по cert_id, обновлять все поля
+
+---
+
+### Вариант 26. Магазины (Shop)
+
+**Таблица:** `shops` (id, name, address, phone, opening_hours, type, shop_code)
+
+**Метод 1:** `mergeShops(long fromTypeId, long toTypeId)` — конфликт по shop_code
+
+**Метод 2:** `batchInsert(List<Shop> shops)` — вставка 5000 записей
+
+**UPSERT:** по shop_code, обновлять все поля
+
+---
+
+### Вариант 27. Здания (Building)
+
+**Таблица:** `buildings` (id, address, floors, area, type, year_built, building_id)
+
+**Метод 1:** `transferBuildings(long fromTypeId, long toTypeId)` — конфликт по building_id
+
+**Метод 2:** `batchInsert(List<Building> buildings)` — вставка 4000 записей
+
+**UPSERT:** по building_id, обновлять все поля
+
+---
+
+### Вариант 28. Лекции (Lecture)
+
+**Таблица:** `lectures` (id, topic, speaker, date, duration, attendees, lecture_code)
+
+**Метод 1:** `mergeLectures(long fromSpeakerId, long toSpeakerId)` — конфликт по lecture_code
+
+**Метод 2:** `batchInsert(List<Lecture> lectures)` — вставка 5000 записей
+
+**UPSERT:** по lecture_code, обновлять все поля
+
+---
+
+### Вариант 29. Отзывы (Review)
+
+**Таблица:** `reviews` (id, user_id, product_id, rating, comment, created_at, review_id)
+
+**Метод 1:** `transferReviews(long fromProductId, long toProductId)` — конфликт по review_id
+
+**Метод 2:** `batchInsert(List<Review> reviews)` — вставка 10000 записей
+
+**UPSERT:** по review_id, обновлять все поля
+
+---
+
+### Вариант 30. Чеки (Receipt)
+
+**Таблица:** `receipts` (id, number, store, total_amount, date, cashier, receipt_number)
+
+**Метод 1:** `mergeReceipts(long fromStoreId, long toStoreId)` — конфликт по receipt_number
+
+**Метод 2:** `batchInsert(List<Receipt> receipts)` — вставка 8000 записей
+
+**UPSERT:** по receipt_number, обновлять все поля
+
+---
+
+## 5. Методические указания
+
+### 5.1. Структура проекта
+
+```
+src/
+├── main/
+│   ├── java/
+│   │   ├── config/
+│   │   │   ├── DatabaseConfig.java
+│   │   │   └── DataSourceProvider.java
+│   │   ├── model/
+│   │   │   └── Book.java
+│   │   ├── dao/
+│   │   │   ├── BookDao.java
+│   │   │   └── BookDaoImpl.java
+│   │   ├── service/
+│   │   │   └── BookService.java
+│   │   ├── util/
+│   │   │   └── PerformanceUtil.java
+│   │   └── Main.java
+│   └── resources/
+│       └── application.properties
+└── test/
+    └── java/
+        └── service/
+            └── BookServiceTest.java
+```
+
+### 5.2. Настройка HikariCP
+
+```java
+package config;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+
+public class DataSourceProvider {
+    private static HikariDataSource dataSource;
+    private static final String URL = "jdbc:postgresql://localhost:5432/postgres";
+    private static final String USER = "postgres";
+    private static final String PASSWORD = "pass";
+    
+    public static synchronized HikariDataSource getDataSource() {
+        if (dataSource == null) {
+            HikariConfig config = new HikariConfig();
+            config.setJdbcUrl(URL);
+            config.setUsername(USER);
+            config.setPassword(PASSWORD);
+            config.setDriverClassName("org.postgresql.Driver");
+            
+            // Оптимальные настройки для производительности
+            config.setMaximumPoolSize(10);
+            config.setMinimumIdle(5);
+            config.setConnectionTimeout(30000);
+            config.setIdleTimeout(600000);
+            config.setMaxLifetime(1800000);
+            
+            // Дополнительные настройки
+            config.addDataSourceProperty("cachePrepStmts", "true");
+            config.addDataSourceProperty("prepStmtCacheSize", "250");
+            config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+            config.setLeakDetectionThreshold(15000);
+            
+            dataSource = new HikariDataSource(config);
+        }
+        return dataSource;
+    }
+    
+    public static Connection getConnection() throws SQLException {
+        return getDataSource().getConnection();
+    }
+    
+    public static void close() {
+        if (dataSource != null) {
+            dataSource.close();
+        }
+    }
+}
+```
+
+### 5.3. Сервисный слой с транзакциями
+
+```java
+package service;
+
+import config.DataSourceProvider;
+import dao.BookDao;
+import model.Book;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 
-/**
- * Клиент для получения прогноза погоды от Open-Meteo API
- */
-public class WeatherClient {
-    private static final String BASE_URL = "https://api.open-meteo.com/v1/forecast";
-
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
-
-    public WeatherClient() {
-        this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
-        this.objectMapper = new ObjectMapper();
+public class BookService {
+    private static final Logger logger = LoggerFactory.getLogger(BookService.class);
+    private final BookDao bookDao;
+    
+    public BookService(BookDao bookDao) {
+        this.bookDao = bookDao;
     }
-
+    
     /**
-     * Запись для ответа API
+     * Переназначение книг от одного автора к другому
      */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record WeatherResponse(
-        double latitude,
-        double longitude,
-        CurrentWeather current_weather
-    ) {}
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record CurrentWeather(
-        double temperature,
-        double windspeed,
-        String winddirection,
-        String weathercode,
-        String time
-    ) {}
-
-    /**
-     * Получает текущую погоду для заданных координат
-     *
-     * @param latitude  широта
-     * @param longitude долгота
-     * @return ответ с данными о погоде
-     */
-    public WeatherResponse getCurrentWeather(double latitude, double longitude)
-            throws WeatherApiException {
-        String url = String.format(
-            "%s?latitude=%.4f&longitude=%.4f&current_weather=true",
-            BASE_URL, latitude, longitude);
-
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .GET()
-            .build();
-
-        try {
-            HttpResponse<String> response = httpClient.send(
-                request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() != 200) {
-                throw new WeatherApiException(
-                    "Ошибка API: статус " + response.statusCode());
-            }
-
-            return objectMapper.readValue(response.body(), WeatherResponse.class);
-        } catch (Exception e) {
-            throw new WeatherApiException("Ошибка получения погоды", e);
-        }
-    }
-
-    /**
-     * Исключение для ошибок API погоды
-     */
-    public static class WeatherApiException extends Exception {
-        public WeatherApiException(String message) { super(message); }
-        public WeatherApiException(String message, Throwable cause) { super(message, cause); }
-    }
-
-    /**
-     * Демонстрационный класс
-     */
-    public static void main(String[] args) {
-        WeatherClient client = new WeatherClient();
-
-        // Москва
-        try {
-            WeatherResponse weather = client.getCurrentWeather(55.7558, 37.6173);
-            System.out.println("=== Погода в Москве ===");
-            System.out.printf("Температура: %.1f°C%n",
-                weather.current_weather().temperature());
-            System.out.printf("Скорость ветра: %.1f м/с%n",
-                weather.current_weather().windspeed());
-            System.out.println("Время измерения: " +
-                weather.current_weather().time());
-        } catch (WeatherApiException e) {
-            System.err.println("Ошибка: " + e.getMessage());
-        }
-    }
-}
-```
-
-### 3.2. Пример 2. Интеграция с LLM API через LangChain4j
-
-```java
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.service.AiServices;
-import dev.langchain4j.service.SystemMessage;
-import dev.langchain4j.service.UserMessage;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import java.util.List;
-
-/**
- * AI-сервис для анализа кода
- */
-public class CodeAnalyzer {
-    /**
-     * Интерфейс AI-сервиса для анализа кода
-     */
-    interface CodeReviewService {
-        @SystemMessage("""
-            Ты — опытный Java-разработчик, специализирующийся на code review.
-            Анализируй код и возвращай ответ СТРОГО в формате JSON:
-            {
-                "issues": [
-                    {"severity": "ERROR|WARNING|INFO", "line": N, "message": "...", "suggestion": "..."}
-                ],
-                "overall_quality": "GOOD|ACCEPTABLE|POOR",
-                "summary": "Краткое резюме"
-            }
-            Не добавляй никаких пояснений вне JSON.
-            """)
-        String reviewCode(@UserMessage String code);
-    }
-
-    /**
-     * Запись для результата анализа
-     */
-    public record CodeReviewResult(
-        @JsonProperty("issues") List<Issue> issues,
-        @JsonProperty("overall_quality") String overallQuality,
-        @JsonProperty("summary") String summary
-    ) {}
-
-    public record Issue(
-        @JsonProperty("severity") String severity,
-        @JsonProperty("line") int line,
-        @JsonProperty("message") String message,
-        @JsonProperty("suggestion") String suggestion
-    ) {}
-
-    private final CodeReviewService reviewService;
-    private final ObjectMapper objectMapper;
-
-    public CodeReviewService(ChatLanguageModel model) {
-        this.reviewService = AiServices.create(CodeReviewService.class, model);
-        this.objectMapper = new ObjectMapper();
-    }
-
-    /**
-     * Выполняет анализ кода и возвращает структурированный результат
-     */
-    public CodeReviewResult analyze(String code) throws Exception {
-        String jsonResponse = reviewService.reviewCode(code);
-
-        // Извлечение JSON из ответа (на случай, если модель добавит markdown)
-        String cleanJson = extractJson(jsonResponse);
-
-        return objectMapper.readValue(cleanJson, CodeReviewResult.class);
-    }
-
-    /**
-     * Извлекает JSON из ответа, удаляя возможные markdown-обёртки
-     */
-    private String extractJson(String response) {
-        String trimmed = response.trim();
-        if (trimmed.startsWith("```json")) {
-            trimmed = trimmed.substring(7);
-        } else if (trimmed.startsWith("```")) {
-            trimmed = trimmed.substring(3);
-        }
-        if (trimmed.endsWith("```")) {
-            trimmed = trimmed.substring(0, trimmed.length() - 3);
-        }
-        return trimmed.trim();
-    }
-
-    /**
-     * Демонстрационный класс
-     */
-    public static void main(String[] args) {
-        // Создание модели (API-ключ из переменной окружения)
-        String apiKey = System.getenv("OPENAI_API_KEY");
-        if (apiKey == null) {
-            System.err.println("Установите переменную окружения OPENAI_API_KEY");
-            return;
-        }
-
-        ChatLanguageModel model = OpenAiChatModel.builder()
-            .apiKey(apiKey)
-            .modelName("gpt-4o-mini")
-            .temperature(0.2)
-            .build();
-
-        CodeAnalyzer analyzer = new CodeAnalyzer(model);
-
-        // Код для анализа
-        String codeToReview = """
-            public class Calculator {
-                public double divide(double a, double b) {
-                    return a / b;
-                }
-
-                public int[] parseNumbers(String s) {
-                    String[] parts = s.split(",");
-                    int[] result = new int[parts.length];
-                    for (int i = 0; i < parts.length; i++) {
-                        result[i] = Integer.parseInt(parts[i]);
-                    }
-                    return result;
-                }
-            }
-            """;
-
-        try {
-            CodeReviewResult result = analyzer.analyze(codeToReview);
-
-            System.out.println("=== Результат анализа кода ===");
-            System.out.println("Общее качество: " + result.overallQuality());
-            System.out.println("Резюме: " + result.summary());
-            System.out.println("\nЗамечания:");
-            for (Issue issue : result.issues()) {
-                System.out.printf("[%s] Строка %d: %s%n",
-                    issue.severity(), issue.line(), issue.message());
-                System.out.printf("   Предложение: %s%n", issue.suggestion());
-            }
-        } catch (Exception e) {
-            System.err.println("Ошибка анализа: " + e.getMessage());
-        }
-    }
-}
-```
-
-### 3.3. Пример 3. Рефакторинг кода с помощью ИИ
-
-```java
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
-
-/**
- * Утилита для рефакторинга кода с помощью ИИ
- */
-public class CodeRefactorer {
-
-    private static final String REFACTOR_PROMPT = """
-        Ты — эксперт по рефакторингу Java-кода. Проанализируй следующий код и предложи улучшения.
-
-        ТРЕБОВАНИЯ К АНАЛИЗУ:
-        1. Принципы SOLID (единственная ответственность, открытость/закрытость и т. д.)
-        2. Чистый код (именование, длина методов, комментарии)
-        3. Обработка ошибок и исключений
-        4. Производительность (где это уместно)
-        5. Применение современных возможностей Java (записи, Stream API, Optional)
-
-        ФОРМАТ ОТВЕТА (строго JSON):
-        {
-            "issues": [
-                {
-                    "category": "SOLID|CLEAN_CODE|ERROR_HANDLING|PERFORMANCE|MODERN_JAVA",
-                    "description": "Описание проблемы",
-                    "location": "Где находится проблема",
-                    "suggestion": "Предлагаемое решение"
-                }
-            ],
-            "refactored_code": "Полностью переписанный код",
-            "summary": "Краткое резюме изменений"
-        }
-
-        КОД ДЛЯ АНАЛИЗА:
-        ```java
-        %s
-        ```
+    public int transferBooks(long fromAuthorId, long toAuthorId) throws SQLException {
+        logger.info("Начало переназначения книг: fromAuthor={}, toAuthor={}", fromAuthorId, toAuthorId);
+        
+        String checkSql = """
+            SELECT b1.isbn 
+            FROM books b1 
+            JOIN books b2 ON b1.isbn = b2.isbn 
+            WHERE b1.author_id = ? AND b2.author_id = ?
         """;
-
-    private final ChatLanguageModel model;
-
-    public CodeRefactorer(ChatLanguageModel model) {
-        this.model = model;
-    }
-
-    /**
-     * Выполняет рефакторинг кода
-     */
-    public RefactoringResult refactor(String code) {
-        String prompt = REFACTOR_PROMPT.formatted(code);
-        String response = model.generate(prompt);
-
-        // Разбор ответа (упрощённо)
-        return parseResponse(response);
-    }
-
-    private RefactoringResult parseResponse(String response) {
-        // Извлечение JSON и разбор (см. предыдущий пример)
-        // ...
-        return new RefactoringResult(response);
-    }
-
-    public record RefactoringResult(String fullResponse) {
-        // Методы для извлечения issues, refactored_code, summary
-    }
-
-    /**
-     * Демонстрационный класс
-     */
-    public static void main(String[] args) {
-        String apiKey = System.getenv("OPENAI_API_KEY");
-        if (apiKey == null) {
-            System.err.println("Установите переменную окружения OPENAI_API_KEY");
-            return;
-        }
-
-        ChatLanguageModel model = OpenAiChatModel.builder()
-            .apiKey(apiKey)
-            .modelName("gpt-4o-mini")
-            .temperature(0.3)
-            .build();
-
-        CodeRefactorer refactorer = new CodeRefactorer(model);
-
-        // «Плохой» код для рефакторинга
-        String badCode = """
-            public class UserService {
-                public void processUser(String data) {
-                    String[] parts = data.split(",");
-                    String name = parts[0];
-                    int age = Integer.parseInt(parts[1]);
-                    String email = parts[2];
-
-                    if (age < 18) {
-                        System.out.println("Несовершеннолетний");
-                        return;
+        
+        String updateSql = "UPDATE books SET author_id = ? WHERE author_id = ?";
+        
+        try (Connection conn = DataSourceProvider.getConnection()) {
+            // Начало транзакции
+            conn.setAutoCommit(false);
+            conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            
+            // Проверка конфликтов
+            try (PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
+                checkStmt.setLong(1, fromAuthorId);
+                checkStmt.setLong(2, toAuthorId);
+                
+                try (ResultSet rs = checkStmt.executeQuery()) {
+                    if (rs.next()) {
+                        String conflictingIsbn = rs.getString("isbn");
+                        logger.error("Конфликт ISBN: {}", conflictingIsbn);
+                        throw new SQLException(
+                            "Книга с ISBN '" + conflictingIsbn + 
+                            "' уже существует у целевого автора"
+                        );
                     }
-                    if (email == null || email.equals("")) {
-                        System.out.println("Нет email");
-                        return;
-                    }
-
-                    // Сохранение в базу (упрощённо)
-                    System.out.println("Сохраняем: " + name + ", " + age + ", " + email);
                 }
             }
-            """;
-
-        System.out.println("=== Исходный код ===");
-        System.out.println(badCode);
-
-        System.out.println("\n=== Анализ и рефакторинг ===");
-        RefactoringResult result = refactorer.refactor(badCode);
-        System.out.println(result.fullResponse());
+            
+            // Выполнение переназначения
+            int transferred;
+            try (PreparedStatement updateStmt = conn.prepareStatement(updateSql)) {
+                updateStmt.setLong(1, toAuthorId);
+                updateStmt.setLong(2, fromAuthorId);
+                transferred = updateStmt.executeUpdate();
+            }
+            
+            // Фиксация транзакции
+            conn.commit();
+            logger.info("Переназначено {} книг", transferred);
+            return transferred;
+            
+        } catch (SQLException e) {
+            logger.error("Ошибка при переназначении книг: {}", e.getMessage());
+            throw e;
+        }
+    }
+    
+    /**
+     * Пакетная вставка книг с сравнением производительности
+     */
+    public BatchInsertResult batchInsertWithComparison(List<Book> books) throws SQLException {
+        logger.info("Сравнение производительности вставки {} книг", books.size());
+        
+        // Построчная вставка
+        long startRow = System.currentTimeMillis();
+        int rowCount = bookDao.insertRowByRow(books);
+        long rowTime = System.currentTimeMillis() - startRow;
+        
+        // Пакетная вставка
+        long startBatch = System.currentTimeMillis();
+        int batchCount = bookDao.batchInsert(books);
+        long batchTime = System.currentTimeMillis() - startBatch;
+        
+        logger.info("Построчная: {} мс, Пакетная: {} мс, Ускорение: {:.2f}x", 
+            rowTime, batchTime, (double) rowTime / batchTime);
+        
+        return new BatchInsertResult(rowCount, rowTime, batchCount, batchTime);
+    }
+    
+    /**
+     * UPSERT — вставка или обновление книги
+     */
+    public Book saveOrUpdate(Book book) throws SQLException {
+        logger.info("UPSERT: isbn={}, title={}", book.getIsbn(), book.getTitle());
+        
+        String sql = """
+            INSERT INTO books (title, author, year, isbn, publisher)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (isbn) DO UPDATE SET
+                title = EXCLUDED.title,
+                author = EXCLUDED.author,
+                year = EXCLUDED.year,
+                publisher = EXCLUDED.publisher
+            RETURNING id
+        """;
+        
+        try (Connection conn = DataSourceProvider.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, book.getTitle());
+            pstmt.setString(2, book.getAuthor());
+            pstmt.setInt(3, book.getYear());
+            pstmt.setString(4, book.getIsbn());
+            pstmt.setString(5, book.getPublisher());
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    long id = rs.getLong(1);
+                    book.setId(id);
+                    logger.info("UPSERT выполнен: id={}, isbn={}", id, book.getIsbn());
+                }
+            }
+        }
+        
+        return book;
+    }
+    
+    /**
+     * Сравнение производительности с пулом и без пула
+     */
+    public PoolComparisonResult comparePoolPerformance(int queryCount) throws SQLException {
+        logger.info("Сравнение производительности: {} запросов", queryCount);
+        
+        // Без пула
+        long startNoPool = System.currentTimeMillis();
+        executeQueriesNoPool(queryCount);
+        long timeNoPool = System.currentTimeMillis() - startNoPool;
+        
+        // С пулом
+        long startPool = System.currentTimeMillis();
+        executeQueriesWithPool(queryCount);
+        long timePool = System.currentTimeMillis() - startPool;
+        
+        logger.info("Без пула: {} мс, С пулом: {} мс", timeNoPool, timePool);
+        
+        return new PoolComparisonResult(timeNoPool, timePool);
+    }
+    
+    private void executeQueriesNoPool(int count) throws SQLException {
+        String url = "jdbc:postgresql://localhost:5432/postgres";
+        String user = "postgres";
+        String pass = "pass";
+        
+        for (int i = 0; i < count; i++) {
+            try (Connection conn = DriverManager.getConnection(url, user, pass);
+                 PreparedStatement pstmt = conn.prepareStatement("SELECT 1")) {
+                pstmt.executeQuery();
+            }
+        }
+    }
+    
+    private void executeQueriesWithPool(int count) throws SQLException {
+        for (int i = 0; i < count; i++) {
+            try (Connection conn = DataSourceProvider.getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement("SELECT 1")) {
+                pstmt.executeQuery();
+            }
+        }
+    }
+    
+    // Вспомогательные классы для результатов
+    public static class BatchInsertResult {
+        public final int rowCount;
+        public final long rowTime;
+        public final int batchCount;
+        public final long batchTime;
+        
+        public BatchInsertResult(int rowCount, long rowTime, int batchCount, long batchTime) {
+            this.rowCount = rowCount;
+            this.rowTime = rowTime;
+            this.batchCount = batchCount;
+            this.batchTime = batchTime;
+        }
+        
+        @Override
+        public String toString() {
+            return String.format(
+                "Построчная вставка: %d записей за %d мс\n" +
+                "Пакетная вставка: %d записей за %d мс\n" +
+                "Ускорение: %.2fx",
+                rowCount, rowTime, batchCount, batchTime, (double) rowTime / batchTime
+            );
+        }
+    }
+    
+    public static class PoolComparisonResult {
+        public final long timeNoPool;
+        public final long timePool;
+        
+        public PoolComparisonResult(long timeNoPool, long timePool) {
+            this.timeNoPool = timeNoPool;
+            this.timePool = timePool;
+        }
+        
+        @Override
+        public String toString() {
+            return String.format(
+                "Без пула: %d мс\nС пулом (HikariCP): %d мс\nУскорение: %.2fx",
+                timeNoPool, timePool, (double) timeNoPool / timePool
+            );
+        }
     }
 }
 ```
 
-## 4. Задания на паре
+### 5.4. Расширенный DAO с пакетной вставкой
 
-### Задание 4.1. Клиент для публичного REST API
+```java
+package dao;
 
-Разработайте клиент для работы с публичным REST API по выбору. Возможные варианты:
+import config.DataSourceProvider;
+import model.Book;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-- **Open-Meteo** (погода, без ключа) — https://open-meteo.com/
-- **JSONPlaceholder** (тестовый API) — https://jsonplaceholder.typicode.com/
-- **NumbersAPI** (факты о числах) — http://numbersapi.com/
-- **Open Library** (книги) — https://openlibrary.org/
-- **REST Countries** (страны) — https://restcountries.com/
-- **CoinGecko** (криптовалюты, без ключа) — https://www.coingecko.com/
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.List;
 
-**Требования к реализации:**
-
-1. Создайте класс-клиент, инкапсулирующий работу с API.
-2. Реализуйте не менее 3 методов для различных операций (получение списка, получение одного элемента, поиск).
-3. Применяйте записи (`record`) для представления ответов API.
-4. Обрабатывайте ошибки HTTP и сетевые сбои.
-5. Применяйте Jackson для десериализации JSON-ответов.
-6. Реализуйте таймауты и конфигурацию клиента.
-7. Создайте демонстрационный класс, показывающий работу с API.
-
-**Пример выполнения программы:**
-
+public class BookDaoImpl implements BookDao {
+    private static final Logger logger = LoggerFactory.getLogger(BookDaoImpl.class);
+    
+    @Override
+    public int batchInsert(List<Book> books) throws SQLException {
+        String sql = "INSERT INTO books (title, author, year, isbn, publisher) VALUES (?, ?, ?, ?, ?)";
+        int count = 0;
+        
+        try (Connection conn = DataSourceProvider.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            conn.setAutoCommit(false);
+            
+            for (Book book : books) {
+                pstmt.setString(1, book.getTitle());
+                pstmt.setString(2, book.getAuthor());
+                pstmt.setInt(3, book.getYear());
+                pstmt.setString(4, book.getIsbn());
+                pstmt.setString(5, book.getPublisher());
+                pstmt.addBatch();
+                count++;
+            }
+            
+            int[] results = pstmt.executeBatch();
+            conn.commit();
+            
+            logger.info("Пакетная вставка: {} записей", results.length);
+        } catch (SQLException e) {
+            logger.error("Ошибка при пакетной вставке", e);
+            throw e;
+        }
+        
+        return count;
+    }
+    
+    @Override
+    public int insertRowByRow(List<Book> books) throws SQLException {
+        String sql = "INSERT INTO books (title, author, year, isbn, publisher) VALUES (?, ?, ?, ?, ?)";
+        int count = 0;
+        
+        try (Connection conn = DataSourceProvider.getConnection()) {
+            conn.setAutoCommit(true);
+            
+            for (Book book : books) {
+                try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    pstmt.setString(1, book.getTitle());
+                    pstmt.setString(2, book.getAuthor());
+                    pstmt.setInt(3, book.getYear());
+                    pstmt.setString(4, book.getIsbn());
+                    pstmt.setString(5, book.getPublisher());
+                    pstmt.executeUpdate();
+                    count++;
+                }
+            }
+        }
+        
+        logger.info("Построчная вставка: {} записей", count);
+        return count;
+    }
+}
 ```
-=== Клиент для REST Countries API ===
 
-Поиск страны по коду RU:
-  Название: Russia
-  Столица: Moscow
-  Население: 144,000,000
-  Регион: Europe
-  Языки: Russian
+### 5.5. Основной класс для демонстрации
 
-Список стран региона Europe (первые 5):
-  - Germany (Berlin) — 83,000,000
-  - France (Paris) — 67,000,000
-  ...
+```java
+import config.DataSourceProvider;
+import dao.BookDao;
+import dao.BookDaoImpl;
+import model.Book;
+import service.BookService;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        BookDao bookDao = new BookDaoImpl();
+        BookService bookService = new BookService(bookDao);
+        
+        try {
+            // 1. Тестирование переназначения
+            System.out.println("=== Переназначение книг ===\n");
+            try {
+                int transferred = bookService.transferBooks(1L, 2L);
+                System.out.println("✓ Переназначено книг: " + transferred);
+            } catch (SQLException e) {
+                System.out.println("✗ Ошибка: " + e.getMessage());
+            }
+            System.out.println();
+            
+            // 2. Тестирование пакетной вставки
+            System.out.println("=== Пакетная вставка ===\n");
+            List<Book> books = generateTestBooks(10000);
+            BookService.BatchInsertResult batchResult = 
+                bookService.batchInsertWithComparison(books);
+            System.out.println(batchResult);
+            System.out.println();
+            
+            // 3. Тестирование UPSERT
+            System.out.println("=== UPSERT ===\n");
+            Book existingBook = new Book("Обновлённая книга", "Новый автор", 2024, "978-5-17-118456-0", "Новое издательство");
+            Book savedBook = bookService.saveOrUpdate(existingBook);
+            System.out.println("✓ UPSERT выполнен: id=" + savedBook.getId());
+            System.out.println();
+            
+            // 4. Сравнение производительности пула
+            System.out.println("=== Сравнение производительности (100 запросов) ===\n");
+            BookService.PoolComparisonResult poolResult = 
+                bookService.comparePoolPerformance(100);
+            System.out.println(poolResult);
+            
+        } catch (SQLException e) {
+            System.err.println("Ошибка: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            DataSourceProvider.close();
+        }
+    }
+    
+    private static List<Book> generateTestBooks(int count) {
+        List<Book> books = new ArrayList<>(count);
+        for (int i = 1; i <= count; i++) {
+            books.add(new Book(
+                "Book " + i,
+                "Author " + (i % 100),
+                2000 + (i % 24),
+                "ISBN-" + String.format("%010d", i),
+                "Publisher " + (i % 10)
+            ));
+        }
+        return books;
+    }
+}
 ```
 
 ---
 
-### Задание 4.2. Простой чат-бот с LLM
+## 6. Контрольные вопросы
 
-Разработайте консольный чат-бот, использующий LLM API.
+1. Что такое транзакция и какие свойства ACID она обеспечивает?
 
-**Требования к реализации:**
+2. Как управлять транзакциями в JDBC?
 
-1. Создайте класс `ChatBot`, инкапсулирующий взаимодействие с LLM.
-2. Реализуйте поддержку диалога с сохранением истории сообщений (контекста).
-3. Задайте системный промпт, определяющий роль бота (например, «репетитор по Java», «помощник в программировании», «консультант по продукту»).
-4. Реализуйте команды пользователя:
-   - `/clear` — очистить историю;
-   - `/history` — показать историю сообщений;
-   - `/save <filename>` — сохранить историю в файл;
-   - `/quit` — завершить работу.
-5. Обрабатывайте ошибки API (сетевые сбои, превышение лимита, некорректные ответы).
-6. Применяйте переменные окружения для хранения API-ключа.
-7. Реализуйте поддержку как облачных (OpenAI, YandexGPT), так и локальных (Ollama) моделей.
+3. Что произойдёт, если не вызвать commit или rollback?
 
-**Пример выполнения программы:**
+4. Что такое точки сохранения (Savepoint) и когда они применяются?
 
-```
-=== Java Tutor Bot ===
-Введите сообщение (или /help для списка команд):
+5. В чём преимущество пакетной вставки перед построчной?
 
-> Что такое полиморфизм?
-Бот: Полиморфизм в Java — это способность объектов с различной
-внутренней структурой иметь общий интерфейс...
+6. Как работает метод addBatch() и executeBatch()?
 
-> Приведи пример
-Бот: Рассмотрим иерархию классов Shape → Circle, Rectangle...
+7. Что такое UPSERT и для чего он нужен?
 
-> /history
-[system]: Ты — репетитор по Java. Отвечай кратко и с примерами.
-[user]: Что такое полиморфизм?
-[assistant]: Полиморфизм в Java — это...
-[user]: Приведи пример
-[assistant]: Рассмотрим иерархию...
+8. В чём отличие INSERT ... ON CONFLICT от отдельного SELECT + INSERT/UPDATE?
 
-> /quit
-История сохранена в chat_history_2026-08-20.json
-```
+9. Что такое пул соединений и зачем он нужен?
+
+10. Как HikariCP повышает производительность?
+
+11. Какие настройки пула соединений важны для производительности?
+
+12. В чём отличие соединения с пулом и без пула?
+
+13. Как обрабатывать конфликты при переназначении данных?
+
+14. Что такое уровень изоляции транзакций?
+
+15. Какие проблемы могут возникнуть при параллельных транзакциях?
+
+16. Как выполнить откат транзакции при ошибке?
+
+17. Как измерить производительность различных подходов к работе с БД?
 
 ---
 
-### Задание 4.3. Интеллектуальный анализатор с интеграцией LLM
-
-Разработайте приложение, использующее LLM для анализа данных предметной области.
-
-**Варианты применения (по выбору):**
-
-- **Анализатор кода** — анализ Java-кода на соответствие принципам SOLID и Clean Code;
-- **Генератор тестов** — создание JUnit-тестов для заданного класса;
-- **Рецензент текста** — проверка текста на грамотность, стиль, связность;
-- **Классификатор** — отнесение текста к определённой категории;
-- **Извлекатель данных** — извлечение структурированных данных из неструктурированного текста.
-
-**Требования к реализации:**
-
-1. Создайте класс-сервис, инкапсулирующий взаимодействие с LLM.
-2. Разработайте тщательно сформулированный системный промпт.
-3. Требуйте от модели ответа в формате JSON с чёткой схемой.
-4. Реализуйте десериализацию ответа модели в записи Java.
-5. Обрабатывайте некорректные ответы модели (не-JSON, неожиданная структура).
-6. Реализуйте повторные попытки при ошибках (retry policy).
-7. Создайте демонстрационный класс с не менее чем 5 сценариями.
-
-**Пример выполнения программы (анализатор резюме):**
+## 7. Ожидаемый результат выполнения (Вариант 1)
 
 ```
-=== Анализатор резюме ===
+=== Переназначение книг ===
+2026-01-15 10:30:15 [main] INFO  BookService - Начало переназначения книг: fromAuthor=1, toAuthor=2
+2026-01-15 10:30:15 [main] INFO  BookService - Переназначено 15 книг
+✓ Переназначено книг: 15
 
-Введите текст резюме или путь к файлу:
-> resume.txt
+=== Пакетная вставка ===
+2026-01-15 10:30:15 [main] INFO  BookService - Сравнение производительности вставки 10000 книг
+2026-01-15 10:30:20 [main] INFO  BookDaoImpl - Построчная вставка: 10000 записей
+2026-01-15 10:30:20 [main] INFO  BookDaoImpl - Пакетная вставка: 10000 записей
+2026-01-15 10:30:20 [main] INFO  BookService - Построчная: 5234 мс, Пакетная: 245 мс, Ускорение: 21.36x
 
-=== Результат анализа ===
+Построчная вставка: 10000 записей за 5234 мс
+Пакетная вставка: 10000 записей за 245 мс
+Ускорение: 21.36x
 
-Кандидат: Иванов Иван Иванович
-Опыт: 5 лет
-Навыки: Java, Spring, SQL, Git
-Уровень: Middle
+=== UPSERT ===
+2026-01-15 10:30:20 [main] INFO  BookService - UPSERT: isbn=978-5-17-118456-0, title=Обновлённая книга
+2026-01-15 10:30:20 [main] INFO  BookService - UPSERT выполнен: id=1, isbn=978-5-17-118456-0
+✓ UPSERT выполнен: id=1
 
-Рекомендация:
-  Сильные стороны:
-    - Опыт работы с Spring Boot
-    - Знание SQL и реляционных БД
-  Слабые стороны:
-    - Отсутствие опыта с микросервисами
-    - Не указан уровень английского
-  Общая оценка: 7/10
+=== Сравнение производительности (100 запросов) ===
+2026-01-15 10:30:20 [main] INFO  BookService - Сравнение производительности: 100 запросов
+2026-01-15 10:30:22 [main] INFO  BookService - Без пула: 1856 мс, С пулом: 156 мс
+
+Без пула: 1856 мс
+С пулом (HikariCP): 156 мс
+Ускорение: 11.90x
 ```
 
-## 5. Задание для самостоятельной работы
-
-Разработать приложение, интегрирующееся с внешним API и/или LLM-сервисом, согласно своему варианту. Требования:
-
-1. Интеграция с внешним API (публичным REST API или LLM API).
-2. Применение `java.net.http.HttpClient` для выполнения HTTP-запросов.
-3. Применение Jackson для сериализации и десериализации JSON.
-4. Обработка ошибок HTTP и сетевых сбоев.
-5. Применение переменных окружения для хранения API-ключей.
-6. Не менее 5 сценариев в демонстрационном классе.
-7. Применение принципов ООП (инкапсуляция, абстракция).
-
-### Варианты заданий
-
-**Вариант 1.** Приложение «Погодный помощник». Получение прогноза погоды для нескольких городов, сравнение погоды, рекомендации по одежде с помощью LLM.
-
-**Вариант 2.** Приложение «Переводчик». Перевод текста между языками с помощью LLM, сохранение истории переводов, анализ качества перевода.
-
-**Вариант 3.** Приложение «Анализатор тональности». Анализ тональности текста (позитивный, нейтральный, негативный) с помощью LLM, обработка отзывов.
-
-**Вариант 4.** Приложение «Генератор тестов». Создание JUnit-тестов для Java-класса с помощью LLM, анализ покрытия.
-
-**Вариант 5.** Приложение «Рецензент кода». Анализ Java-кода на соответствие стандартам, предложения по улучшению.
-
-**Вариант 6.** Приложение «Саммари текста». Создание краткого содержания длинного текста с помощью LLM, извлечение ключевых тезисов.
-
-**Вариант 7.** Приложение «Помощник в изучении Java». Объяснение концепций Java, генерация примеров, проверка понимания.
-
-**Вариант 8.** Приложение «Классификатор документов». Отнесение документов к категориям с помощью LLM, извлечение метаданных.
-
-**Вариант 9.** Приложение «Генератор описаний товаров». Создание описаний для товаров интернет-магазина с помощью LLM.
-
-**Вариант 10.** Приложение «Помощник в написании писем». Генерация деловых писем по заданным параметрам с помощью LLM.
-
-**Вариант 11.** Приложение «Анализатор новостей». Получение новостей из публичного API, суммаризация и категоризация с помощью LLM.
-
-**Вариант 12.** Приложение «Помощник по рецептам». Получение рецептов из API, генерация рекомендаций по замене ингредиентов с помощью LLM.
-
-**Вариант 13.** Приложение «Анализатор резюме». Извлечение структурированных данных из резюме с помощью LLM, оценка кандидатов.
-
-**Вариант 14.** Приложение «Помощник в планировании». Создание плана проекта или обучения с помощью LLM, декомпозиция задач.
-
-**Вариант 15.** Приложение «Генератор тестовых вопросов». Создание вопросов по заданной теме с помощью LLM, различных уровней сложности.
-
-**Вариант 16.** Приложение «Анализатор тональности отзывов». Получение отзывов о продукте, анализ тональности, выявление проблем.
-
-**Вариант 17.** Приложение «Помощник в отладке». Анализ сообщений об ошибках, предложение решений с помощью LLM.
-
-**Вариант 18.** Приложение «Генератор документации». Создание Javadoc-комментариев для Java-кода с помощью LLM.
-
-**Вариант 19.** Приложение «Переводчик технического текста». Перевод технической документации с сохранением терминологии.
-
-**Вариант 20.** Приложение «Анализатор зависимостей». Анализ Maven/Gradle зависимостей, рекомендации по обновлению с помощью LLM.
-
-**Вариант 21.** Приложение «Помощник по SQL». Генерация SQL-запросов по естественному описанию, объяснение существующих запросов.
-
-**Вариант 22.** Приложение «Генератор тестовых данных». Создание реалистичных тестовых данных (имена, адреса, даты) с помощью LLM.
-
-**Вариант 23.** Приложение «Анализатор логов». Анализ лог-файлов, выявление аномалий и ошибок с помощью LLM.
-
-**Вариант 24.** Приложение «Помощник в написании README». Генерация README-файлов для GitHub-репозиториев с помощью LLM.
-
-**Вариант 25.** Приложение «Рецензент эссе». Анализ эссе на структуру, аргументацию, грамматику с помощью LLM.
-
-**Вариант 26.** Приложение «Генератор commit-сообщений». Создание информативных commit-сообщений по diff с помощью LLM.
-
-**Вариант 27.** Приложение «Помощник в миграции кода». Помощь в переходе между версиями Java или фреймворками с помощью LLM.
-
-**Вариант 28.** Приложение «Анализатор производительности». Анализ кода на предмет потенциальных проблем производительности с помощью LLM.
-
-**Вариант 29.** Приложение «Генератор моков». Создание mock-объектов для модульного тестирования с помощью LLM.
-
-**Вариант 30.** Приложение «Помощник в выборе технологий». Рекомендации по выбору стека технологий для проекта с помощью LLM.
-
-## 6. Методические указания к самостоятельной работе
-
-1. **Выбор API.** При выборе внешнего API учитывайте:
-   - наличие бесплатного тарифа или возможности локального запуска;
-   - качество документации;
-   - стабильность сервиса;
-   - ограничения (лимиты запросов, размер ответа).
-
-2. **Архитектура клиента.** Применяйте принципы ООП при проектировании клиента API:
-   - инкапсулируйте работу с HTTP в отдельном классе;
-   - применяйте записи для представления DTO (Data Transfer Objects);
-   - выносите обработку ошибок в отдельный слой;
-   - применяйте интерфейсы для абстрагирования от конкретного провайдера.
-
-3. **Конфигурация.** Реализуйте гибкую конфигурацию:
-   - API-ключи — через переменные окружения;
-   - URL API, таймауты, параметры — через конфигурационные файлы или конструктор;
-   - поддержка различных провайдеров (OpenAI, Ollama, YandexGPT).
-
-4. **Обработка ошибок.** Реализуйте надёжную обработку ошибок:
-   - сетевые сбои (IOException, HttpTimeoutException);
-   - ошибки API (не-2xx статусы);
-   - некорректные ответы (не-JSON, неожиданная структура);
-   - повторные попытки при временных ошибках (retry policy).
-
-5. **Prompt-инженерия.** При работе с LLM:
-   - формулируйте чёткие, конкретные промпты;
-   - указывайте желаемый формат ответа;
-   - применяйте системные промпты для задания роли;
-   - тестируйте промпты на различных входных данных;
-   - обрабатывайте случаи, когда модель не следует формату.
-
-6. **Безопасность.** Соблюдайте принципы безопасности:
-   - никогда не фиксируйте API-ключи в коде;
-   - не передавайте конфиденциальные данные во внешние сервисы;
-   - применяйте HTTPS для всех запросов;
-   - валидируйте ответы API перед использованием.
-
-7. **Тестирование.** Для тестирования без реальных запросов:
-   - применяйте mock-серверы (WireMock, MockServer);
-   - используйте заранее подготовленные JSON-файлы;
-   - применяйте локальные модели (Ollama);
-   - реализуйте интерфейсы для подмены реальных клиентов тестовыми.
-
-8. **Производительность.** Учитывайте особенности работы с API:
-   - применяйте асинхронные запросы для параллельной обработки;
-   - реализуйте кэширование часто запрашиваемых данных;
-   - соблюдайте лимиты запросов (rate limiting);
-   - применяйте пулы соединений для множественных запросов.
-
-9. **Применение ИИ.** При использовании ИИ-ассистентов для разработки:
-   - генерируйте по отдельности клиенты API, модели данных и демонстрационные классы;
-   - обязательно проверяйте сгенерированный код на корректность обработки ошибок;
-   - не делегируйте ИИ проектирование архитектуры без понимания;
-   - документируйте случаи, когда ИИ предложил некорректное решение.
-
-10. **Оформление отчёта.** Отчёт должен содержать:
-    - листинги всех файлов проекта с комментариями;
-    - описание использованного API (ссылки на документацию);
-    - примеры запросов и ответов API;
-    - протокол работы демонстрационного класса;
-    - описание применённых промптов (для LLM-интеграции);
-    - обоснование архитектурных решений;
-    - ответы на контрольные вопросы;
-    - выводы по проделанной работе.
-
-## 7. Контрольные вопросы
-
-1. Что такое протокол HTTP? Каковы его основные методы?
-2. Какие коды состояния HTTP существуют? Что означают коды 2xx, 4xx, 5xx?
-3. Что такое REST-архитектура? Каковы её основные принципы?
-4. Как проектируется RESTful API? Каким URL соответствуют различные операции?
-5. Что такое `java.net.http.HttpClient`? Каковы его основные возможности?
-6. Каким образом выполняются синхронные и асинхронные HTTP-запросы?
-7. Какие типы ошибок могут возникать при работе с внешними API?
-8. Что такое большие языковые модели (LLM)? Приведите примеры.
-9. Какова общая схема взаимодействия с LLM API?
-10. Что такое промпт? Каковы принципы эффективных промптов?
-11. Какие роли сообщений существуют в диалоговых LLM?
-12. Что такое температура генерации? Как она влияет на ответы модели?
-13. Что такое LangChain4j? Каковы его основные возможности?
-14. Что такое AI Services в LangChain4j? Как они применяются?
-15. Каким образом следует хранить API-ключи?
-16. Что такое mock-серверы? Для каких целей они применяются?
-17. Каким образом можно получить структурированный ответ от LLM?
-18. Каковы этические аспекты применения LLM в приложениях?
-19. Какие альтернативы облачным LLM API существуют?
-20. Каким образом ИИ может применяться для рефакторинга кода?
+---
 
 ## 8. Рекомендуемые источники
 
-1. Хорстманн К. *Java. Библиотека профессионала. Том 2.* — М.: Вильямс. — Глава 2 (Сетевое программирование).
-2. Официальная документация Java HttpClient. URL: https://docs.oracle.com/en/java/javase/17/docs/api/java.net.http/module-summary.html
-3. Документация LangChain4j. URL: https://docs.langchain4j.dev/
-4. OpenAI API Documentation. URL: https://platform.openai.com/docs/api-reference
-5. Ollama Documentation. URL: https://ollama.ai/library
-6. REST API Tutorial. URL: https://restfulapi.net/
-7. Baeldung. Java HttpClient. URL: https://www.baeldung.com/java-9-http-client
-8. Baeldung. Guide to OpenAI API with Java. URL: https://www.baeldung.com/java-openai-api
-9. Prompt Engineering Guide. URL: https://www.promptingguide.ai/
-10. Martin R. C. *Clean Architecture.* — Prentice Hall. — Разделы о внешних сервисах и интеграции.
+1. **Шилдт Г.** *Java. Базовый курс.* — М.: Вильямс. — Глава 16 (Работа с базами данных).
+
+2. **Хорстманн К., Корнелл Г.** *Java. Библиотека профессионала. Том 2.* — М.: Вильямс. — Глава 4 (Базы данных).
+
+3. **PostgreSQL Documentation: INSERT ON CONFLICT.** — URL: https://www.postgresql.org/docs/current/sql-insert.html
+
+4. **HikariCP GitHub.** — URL: https://github.com/brettwooldridge/HikariCP
+
+5. **Baeldung: HikariCP Tutorial.** — URL: https://www.baeldung.com/hikaricp
+
+6. **Oracle Java Tutorials: JDBC Transactions.** — URL: https://docs.oracle.com/javase/tutorial/jdbc/basics/transactions.html
