@@ -139,10 +139,11 @@ int m = n;       // автораспаковка: n.intValue()
 
 ### Задача. Класс «Книга»
 
-1. **Создать проект** в IntelliJ IDEA:
-   - File → New → Project → Java → JDK 17+;
-   - имя проекта: `lab01-first-class`;
-   - создать пакет `com.university.lab01`.
+1. **Создать проект** в NetBeans:
+   - File → New Project → Java → Java Application → Next;
+   - имя проекта: `lab01-first-class`→ Finish;
+   - структура проекта (слева): scr - папка с исходными файлами; lib - библиотеки проекта; build - откомпилированные файлы;
+   - в папке scr файл Main.java - основной файл проекта.
 
 2. **Инициализировать Git-репозиторий:**
    ```bash
